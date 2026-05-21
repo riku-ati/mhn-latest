@@ -51,7 +51,10 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y \
         libunwind-dev libfl-dev curl
 
     cd /tmp
-    wget "https://github.com/snort3/snort3/releases/download/${SNORT3_VERSION}/snort3-${SNORT3_VERSION}.tar.gz"
+    # Use the GitHub auto-generated source archive (always present for every tag;
+    # the releases/download/ URL only works if a tarball asset was manually attached)
+    wget "https://github.com/snort3/snort3/archive/refs/tags/${SNORT3_VERSION}.tar.gz" \
+         -O "snort3-${SNORT3_VERSION}.tar.gz"
     tar xzf "snort3-${SNORT3_VERSION}.tar.gz"
     cd "snort3-${SNORT3_VERSION}"
     ./configure_cmake.sh --prefix=/usr/local/snort
