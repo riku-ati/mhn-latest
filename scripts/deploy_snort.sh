@@ -49,13 +49,18 @@ if [ -z "$SNORT_BIN" ]; then
         libluajit-5.1-dev libunwind-dev libfl-dev curl
 
     # ── Build libdaq (provides DAQ_Msg_h etc.) ──────────────────────────────
-    LIBDAQ_VERSION=$(curl -s https://api.github.com/repos/snort3/libdaq/releases/latest \
+    # Keep the raw tag for the URL (GitHub uses the exact tag string, e.g. v3.0.27);
+    # strip the leading 'v' only for the extracted directory name (GitHub drops it).
+    LIBDAQ_TAG=$(curl -s https://api.github.com/repos/snort3/libdaq/releases/latest \
         | grep -oP '"tag_name":\s*"\K[^"]+' | head -1)
-    LIBDAQ_VERSION=${LIBDAQ_VERSION#v}
-    [ -z "$LIBDAQ_VERSION" ] && LIBDAQ_VERSION="3.0.16"
+    LIBDAQ_VERSION=${LIBDAQ_TAG#v}
+    if [ -z "$LIBDAQ_VERSION" ]; then
+        LIBDAQ_TAG="v3.0.16"
+        LIBDAQ_VERSION="3.0.16"
+    fi
 
     cd /tmp
-    wget "https://github.com/snort3/libdaq/archive/refs/tags/${LIBDAQ_VERSION}.tar.gz" \
+    wget "https://github.com/snort3/libdaq/archive/refs/tags/${LIBDAQ_TAG}.tar.gz" \
          -O "libdaq-${LIBDAQ_VERSION}.tar.gz"
     tar xzf "libdaq-${LIBDAQ_VERSION}.tar.gz"
     cd "libdaq-${LIBDAQ_VERSION}"
@@ -66,15 +71,18 @@ if [ -z "$SNORT_BIN" ]; then
     ldconfig
 
     # ── Build snort3 ────────────────────────────────────────────────────────
-    SNORT3_VERSION=$(curl -s https://api.github.com/repos/snort3/snort3/releases/latest \
+    SNORT3_TAG=$(curl -s https://api.github.com/repos/snort3/snort3/releases/latest \
         | grep -oP '"tag_name":\s*"\K[^"]+' | head -1)
-    SNORT3_VERSION=${SNORT3_VERSION#v}
-    [ -z "$SNORT3_VERSION" ] && SNORT3_VERSION="3.12.2.0"
+    SNORT3_VERSION=${SNORT3_TAG#v}
+    if [ -z "$SNORT3_VERSION" ]; then
+        SNORT3_TAG="3.12.2.0"
+        SNORT3_VERSION="3.12.2.0"
+    fi
 
     echo "Building Snort3 ${SNORT3_VERSION}..."
     cd /tmp
     # Use GitHub auto-generated source archive (releases/download has no tarball asset)
-    wget "https://github.com/snort3/snort3/archive/refs/tags/${SNORT3_VERSION}.tar.gz" \
+    wget "https://github.com/snort3/snort3/archive/refs/tags/${SNORT3_TAG}.tar.gz" \
          -O "snort3-${SNORT3_VERSION}.tar.gz"
     tar xzf "snort3-${SNORT3_VERSION}.tar.gz"
     cd "snort3-${SNORT3_VERSION}"
