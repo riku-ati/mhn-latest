@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 """
 Populate DeployScript records from the bundled /scripts/ directory.
-Safe to run on an existing DB — skips scripts already present by name.
-Does NOT touch rules, users, or any other data.
+
+Usage:
+  python load_scripts.py           # skip scripts already present by name
+  python load_scripts.py --reload  # overwrite ALL scripts with current file content
 """
+import sys
 from os import path
 from app import mhn, db
 from app.api.models import DeployScript
@@ -26,16 +29,22 @@ DEPLOY_SCRIPTS = [
     ['Ubuntu/Raspberry Pi - Magenpot',   'deploy_magenpot.sh'],
 ]
 
+force_reload = '--reload' in sys.argv
+
 with mhn.app_context():
     scripts_dir = mhn.config.get('SCRIPTS_DIR', '/scripts')
     print(f"Scripts directory: {scripts_dir}")
+    if force_reload:
+        print("Mode: RELOAD (overwriting existing records)")
+    else:
+        print("Mode: SKIP existing (use --reload to overwrite)")
 
     superuser = User.query.first()
     if not superuser:
         print("ERROR: No users found — run initdatabase.py first.")
-        exit(1)
+        sys.exit(1)
 
-    loaded = skipped = missing = 0
+    loaded = updated = skipped = missing = 0
     for name, filename in DEPLOY_SCRIPTS:
         deploy_abs = path.join(scripts_dir, filename)
 
@@ -44,22 +53,29 @@ with mhn.app_context():
             missing += 1
             continue
 
-        if DeployScript.query.filter_by(name=name).first():
-            print(f"  EXISTS   {name}")
-            skipped += 1
-            continue
-
         with open(deploy_abs, 'r') as f:
             script_text = f.read()
 
-        ds = DeployScript()
-        ds.name = name
-        ds.script = script_text
-        ds.notes = f'Deploy script for {name}'
-        ds.user = superuser
-        db.session.add(ds)
-        print(f"  LOADED   {name}")
-        loaded += 1
+        existing = DeployScript.query.filter_by(name=name).first()
+
+        if existing:
+            if force_reload:
+                existing.script = script_text
+                db.session.add(existing)
+                print(f"  UPDATED  {name}")
+                updated += 1
+            else:
+                print(f"  EXISTS   {name}")
+                skipped += 1
+        else:
+            ds = DeployScript()
+            ds.name = name
+            ds.script = script_text
+            ds.notes = f'Deploy script for {name}'
+            ds.user = superuser
+            db.session.add(ds)
+            print(f"  LOADED   {name}")
+            loaded += 1
 
     db.session.commit()
-    print(f"\nDone — {loaded} loaded, {skipped} already existed, {missing} files missing.")
+    print(f"\nDone — {loaded} loaded, {updated} updated, {skipped} skipped, {missing} files missing.")
