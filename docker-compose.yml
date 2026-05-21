@@ -21,9 +21,15 @@ services:
 
   hpfeeds-broker:
     build: .
-    command: python -m hpfeeds.scripts.broker --bind 0.0.0.0:10000 --auth mongodb://mongodb:27017/hpfeeds
+    command: >
+      python -m hpfeeds.scripts.broker
+      --bind 0.0.0.0:10000
+      --auth mongodb://${MONGODB_HOST:-mongodb}:${MONGODB_PORT:-27017}/hpfeeds
     ports:
       - "10000:10000"
+    environment:
+      - MONGODB_HOST=${MONGODB_HOST:-mongodb}
+      - MONGODB_PORT=${MONGODB_PORT:-27017}
     depends_on:
       - mongodb
     restart: unless-stopped
