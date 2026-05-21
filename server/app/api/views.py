@@ -1,6 +1,7 @@
 import json
 from io import StringIO
 import csv
+import datetime
 
 from uuid import uuid1
 
@@ -36,7 +37,9 @@ def create_sensor():
         sensor = Sensor(**request.json)
         sensor.uuid = str(uuid1())
         sensor.ip = request.remote_addr
-        Clio().authkey.new(**sensor.new_auth_dict()).post()
+        auth_dict = sensor.new_auth_dict()
+        auth_dict['last_seen'] = datetime.datetime.utcnow()
+        Clio().authkey.new(**auth_dict).post()
         try:
             db.session.add(sensor)
             db.session.commit()

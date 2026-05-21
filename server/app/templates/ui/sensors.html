@@ -18,7 +18,11 @@
   {% for sr in sensors.items %}
   <div class="sensor-card">
     <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;">
-      <div class="sensor-name">{{ sr.name or sr.hostname or 'Unnamed Sensor' }}</div>
+      <div style="display:flex;align-items:center;gap:8px;min-width:0;">
+        <span class="sensor-status-dot {% if sr.alive %}status-online{% else %}status-offline{% endif %}"
+              title="{% if sr.alive %}Connected — last check-in within 24 h{% else %}Offline or no check-in yet{% endif %}"></span>
+        <div class="sensor-name">{{ sr.name or sr.hostname or 'Unnamed Sensor' }}</div>
+      </div>
       <span class="hp-badge" data-hp="{{ sr.honeypot }}">{{ sr.honeypot }}</span>
     </div>
 

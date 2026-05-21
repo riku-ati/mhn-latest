@@ -1,6 +1,6 @@
 import string
 from random import choice
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from sqlalchemy import UniqueConstraint, func
 
@@ -73,6 +73,21 @@ class Sensor(db.Model, APIModel):
     @property
     def authkey(self):
         return Clio().authkey.get(identifier=self.uuid)
+
+    @property
+    def alive(self):
+        """True if the sensor has checked in via hpfeeds within the last 24 hours.
+        Newly registered sensors show green immediately (last_seen set at registration)."""
+        try:
+            ak = self.authkey
+            if ak is None:
+                return False
+            last_seen = getattr(ak, 'last_seen', None)
+            if last_seen is None:
+                return False
+            return last_seen > (datetime.utcnow() - timedelta(hours=24))
+        except Exception:
+            return False
 
     @staticmethod
     def get_channels(honeypot):

@@ -211,6 +211,12 @@ def run():
                 inserted[0] += len(recs)
                 logger.info('[%s] %s → %d session(s) stored (total: %d)',
                             channel, identifier, len(recs), inserted[0])
+            # Always stamp last_seen so the portal can show green even before
+            # a sensor has received any attacks (e.g. fresh Snort install).
+            db.auth_key.update_one(
+                {'identifier': identifier},
+                {'$set': {'last_seen': datetime.datetime.utcnow()}}
+            )
 
         def on_error(payload):
             logger.error('hpfeeds error: %s', payload)

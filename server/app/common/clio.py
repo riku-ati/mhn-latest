@@ -508,7 +508,7 @@ class AuthKey(ResourceMixin):
 
     db_name = 'hpfeeds'
     collection_name = 'auth_key'
-    expected_filters = ('identifier', 'secret', 'publish', 'subscribe', '_id')
+    expected_filters = ('identifier', 'secret', 'publish', 'subscribe', 'last_seen', '_id')
 
     def get(self, options={}, **kwargs):
         if 'identifier' in kwargs:
@@ -518,9 +518,15 @@ class AuthKey(ResourceMixin):
             return super(AuthKey, self).get(options, **kwargs)
 
     def post(self):
-        result = self.collection.insert_one(dict(
-                identifier=self.identifier, secret=self.secret,
-                publish=self.publish, subscribe=self.subscribe))
+        doc = dict(
+            identifier=self.identifier,
+            secret=self.secret,
+            publish=self.publish,
+            subscribe=self.subscribe,
+        )
+        if getattr(self, 'last_seen', None) is not None:
+            doc['last_seen'] = self.last_seen
+        result = self.collection.insert_one(doc)
         return result.inserted_id
 
     def put(self, **kwargs):
