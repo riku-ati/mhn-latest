@@ -61,7 +61,7 @@
         {% if script.id %}
         <div class="form-group">
           <label>Deploy Command</label>
-          <div class="code-block" id="deploy-cmd">wget "{{ config.SERVER_URL | default('http://your-server') }}/api/script/?text=true&script_id={{ script.id }}" -O deploy.sh && sudo bash deploy.sh {{ config.SERVER_URL | default('http://your-server') }} {{ config.DEPLOY_KEY | default('API_KEY') }}</div>
+          <div class="code-block" id="deploy-cmd">wget "{{ settings.server_url }}/api/script/?text=true&script_id={{ script.id }}" -O deploy.sh && sudo bash deploy.sh {{ settings.server_url }} {{ settings.deploy_key }}</div>
           <button type="button" class="btn btn-secondary btn-sm" data-copy="#deploy-cmd" style="margin-top:8px;">Copy Command</button>
         </div>
         <div class="divider"></div>

@@ -71,22 +71,22 @@
 
     <div class="form-group">
       <label>2. Run on target machine</label>
-      <div class="code-block">wget "http://&lt;server-url&gt;/api/script/?text=true&amp;script_id=&lt;id&gt;" -O deploy.sh
-sudo bash deploy.sh &lt;server-url&gt; &lt;api-key&gt;</div>
+      <div class="code-block" id="deploy-cmd-example">wget "{{ settings.server_url }}/api/script/?text=true&amp;script_id=SCRIPT_ID" -O deploy.sh &amp;&amp; sudo bash deploy.sh {{ settings.server_url }} {{ settings.deploy_key }}</div>
+      <button type="button" class="btn btn-secondary btn-sm" data-copy="#deploy-cmd-example" style="margin-top:8px;">Copy</button>
     </div>
 
     <div class="form-group">
       <label>Server URL</label>
       <div class="api-key-wrap">
-        <span class="api-key-value" id="server-url">{{ config.SERVER_URL | default(request.host_url.rstrip('/')) }}</span>
+        <span class="api-key-value" id="server-url">{{ settings.server_url }}</span>
         <button type="button" class="btn btn-secondary btn-sm" data-copy="#server-url">Copy</button>
       </div>
     </div>
 
     <div class="form-group mb-0">
-      <label>API Key</label>
+      <label>Deploy Key</label>
       <div class="api-key-wrap">
-        <span class="api-key-value" id="deploy-apikey">{{ config.DEPLOY_KEY | default('Configure in Settings') }}</span>
+        <span class="api-key-value" id="deploy-apikey">{{ settings.deploy_key }}</span>
         <button type="button" class="btn btn-secondary btn-sm" data-copy="#deploy-apikey">Copy</button>
       </div>
     </div>
