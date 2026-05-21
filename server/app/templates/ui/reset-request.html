@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Forgot Password — Modern Honey Network</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body style="display:block;">
+  <div class="auth-page">
+    <div class="auth-card">
+      <div style="text-align:center;margin-bottom:28px;">
+        <span style="font-size:32px;color:var(--accent-blue);">🔑</span>
+        <div class="auth-title" style="margin-top:8px;">Forgot Password</div>
+        <div class="auth-subtitle">
+          Enter your email address and we'll send you a password reset link.
+        </div>
+      </div>
+
+      <div id="req-alert" class="alert" style="display:none;"></div>
+
+      <form id="reset-req-form" action="{{ url_for('auth.reset_passwd_request') }}" method="post">
+        <input id="_csrf_token" name="_csrf_token" type="hidden" value="{{ csrf_token() }}">
+
+        <div class="form-group">
+          <label for="email-edit">Email Address</label>
+          <input
+            id="email-edit"
+            name="email"
+            type="email"
+            placeholder="admin@example.com"
+            autocomplete="email"
+            required
+          />
+        </div>
+
+        <button id="submit-req" type="submit" class="btn btn-primary" style="width:100%;justify-content:center;">
+          Send Reset Email
+        </button>
+      </form>
+
+      <div style="text-align:center;margin-top:20px;">
+        <a href="{{ url_for('auth.login_user') }}" style="font-size:12px;color:var(--text-muted);">← Back to Login</a>
+      </div>
+    </div>
+  </div>
+  <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>

@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% block title %}Rules{% endblock %}
+{% block page_title %}Rules{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div class="page-header-left">
+    <div class="section-title">Rules Management</div>
+    <div class="section-subtitle">Activate or deactivate Snort/Suricata rules</div>
+  </div>
+  <div style="display:flex;gap:8px;">
+    <a href="{{ url_for('api.get_rules', plaintext=true) }}" class="btn btn-secondary btn-sm" target="_blank">Live Render</a>
+    <a href="/static/mhn.rules" class="btn btn-secondary btn-sm" target="_blank">Pre-Rendered</a>
+    <a href="{{ url_for('ui.rule_sources_mgmt') }}" class="btn btn-secondary btn-sm">Sources</a>
+  </div>
+</div>
+
+<!-- Search -->
+<form id="rule-filter" action="" method="get">
+  <div class="toolbar">
+    <div class="search-input">
+      <input
+        type="text"
+        name="sig_name"
+        value="{{ sig_name }}"
+        placeholder="Search signature..."
+        class="debounce-search"
+        data-form="#rule-filter"
+      />
+    </div>
+    <button type="submit" class="btn btn-primary">Search</button>
+    {% if sig_name %}
+      <a href="{{ url_for('ui.get_rules') }}" class="btn btn-secondary">Clear</a>
+    {% endif %}
+  </div>
+</form>
+
+<input id="_csrf_token" name="_csrf_token" type="hidden" value="{{ csrf_token() }}">
+
+<div class="card" style="padding:0;">
+  <div class="table-wrap">
+    <table id="rule-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Date</th>
+          <th>SID</th>
+          <th>Rev</th>
+          <th>Revisions</th>
+          <th>Message</th>
+          <th>Class Type</th>
+          <th>References</th>
+          <th>Notes</th>
+          <th>Active</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for ru in rules.items %}
+        <tr>
+          <td class="text-muted mono" style="font-size:11px;">{{ loop.index }}</td>
+          <td class="mono" style="font-size:11px;" data-ts="{{ ru.Rule.date }}">{{ ru.Rule.date | fdate }}</td>
+          <td class="mono text-blue">{{ ru.Rule.sid }}</td>
+          <td class="mono text-muted">{{ ru.Rule.rev }}</td>
+          <td class="mono">{{ ru.nrevs }}</td>
+          <td style="max-width:200px;font-size:12px;">{{ ru.Rule.message }}</td>
+          <td>
+            <span class="badge badge-purple" style="font-size:10px;">{{ ru.Rule.classtype }}</span>
+          </td>
+          <td>
+            {% if ru.Rule.references %}
+              <select class="filter-select" style="font-size:11px;padding:4px 6px;width:120px;">
+                {% for ref in ru.Rule.references %}
+                  <option disabled>"{{ ref.text }}"</option>
+                {% endfor %}
+              </select>
+            {% else %}
+              <span class="text-muted">—</span>
+            {% endif %}
+          </td>
+          <td style="min-width:160px;">
+            <textarea
+              class="text-edit"
+              data-rule-id="{{ ru.Rule.id }}"
+              data-field-name="notes"
+              rows="2"
+              style="font-size:11px;min-height:auto;padding:4px 6px;"
+            >{{ ru.Rule.notes if ru.Rule.notes != None }}</textarea>
+          </td>
+          <td>
+            <label class="toggle">
+              <input
+                type="checkbox"
+                class="rule-toggle"
+                data-rule-id="{{ ru.Rule.id }}"
+                {% if ru.Rule.is_active %}checked{% endif %}
+              />
+              <span class="toggle-slider"></span>
+            </label>
+            {% if ru.Rule.is_active %}
+              <span class="badge badge-green" style="font-size:10px;margin-left:4px;">ON</span>
+            {% else %}
+              <span class="badge badge-muted" style="font-size:10px;margin-left:4px;">OFF</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="10">
+            <div class="empty-state">
+              <span class="empty-state-icon">🔒</span>
+              <div class="empty-state-text">No rules found{% if sig_name %} matching "{{ sig_name }}"{% endif %}</div>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% from "pagination.html" import render_pagination %}
+{{ render_pagination(rules, view, request.args.to_dict()) }}
+{% endblock %}

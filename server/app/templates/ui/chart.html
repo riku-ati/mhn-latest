@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}Charts{% endblock %}
+{% block page_title %}Charts{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div class="page-header-left">
+    <div class="section-title">Attack Analytics</div>
+    <div class="section-subtitle">Kippo/Cowrie honeypot credential statistics</div>
+  </div>
+</div>
+
+<div class="chart-grid">
+  <div class="chart-card">
+    <div class="chart-card-header">Top Usernames</div>
+    <div class="chart-card-body">
+      <img src="/image/top_users.svg" alt="Top Usernames Chart" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+      <div class="empty-state" style="display:none;padding:20px;">
+        <span class="empty-state-icon" style="font-size:32px;">📊</span>
+        <div class="empty-state-text">No data available</div>
+        <a href="/image/top_users.svg" class="btn btn-secondary btn-sm" style="margin-top:12px;" target="_blank">View SVG</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="chart-card">
+    <div class="chart-card-header">Top Passwords</div>
+    <div class="chart-card-body">
+      <img src="/image/top_passwords.svg" alt="Top Passwords Chart" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+      <div class="empty-state" style="display:none;padding:20px;">
+        <span class="empty-state-icon" style="font-size:32px;">📊</span>
+        <div class="empty-state-text">No data available</div>
+        <a href="/image/top_passwords.svg" class="btn btn-secondary btn-sm" style="margin-top:12px;" target="_blank">View SVG</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="chart-card">
+    <div class="chart-card-header">Top User/Password Combinations</div>
+    <div class="chart-card-body">
+      <img src="/image/top_combos.svg" alt="Top Combos Chart" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+      <div class="empty-state" style="display:none;padding:20px;">
+        <span class="empty-state-icon" style="font-size:32px;">📊</span>
+        <div class="empty-state-text">No data available</div>
+        <a href="/image/top_combos.svg" class="btn btn-secondary btn-sm" style="margin-top:12px;" target="_blank">View SVG</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="chart-card">
+    <div class="chart-card-header">Top Attacking Sessions</div>
+    <div class="chart-card-body">
+      <img src="/image/top_sessions.svg" alt="Top Sessions Chart" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+      <div class="empty-state" style="display:none;padding:20px;">
+        <span class="empty-state-icon" style="font-size:32px;">📊</span>
+        <div class="empty-state-text">No data available</div>
+        <a href="/image/top_sessions.svg" class="btn btn-secondary btn-sm" style="margin-top:12px;" target="_blank">View SVG</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div style="margin-top:16px;display:flex;gap:12px;flex-wrap:wrap;">
+  <a href="/image/top_passwords.svg" class="btn btn-secondary btn-sm" target="_blank">↗ Passwords SVG</a>
+  <a href="/image/top_users.svg" class="btn btn-secondary btn-sm" target="_blank">↗ Users SVG</a>
+  <a href="/image/top_combos.svg" class="btn btn-secondary btn-sm" target="_blank">↗ Combos SVG</a>
+  <a href="/image/top_sessions.svg" class="btn btn-secondary btn-sm" target="_blank">↗ Sessions SVG</a>
+</div>
+{% endblock %}

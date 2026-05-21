@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block title %}Add Sensor{% endblock %}
+{% block page_title %}Add Sensor{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div class="page-header-left">
+    <div class="section-title">Add a New Sensor</div>
+    <div class="section-subtitle">Deploy a new honeypot node to your network</div>
+  </div>
+  <a href="{{ url_for('ui.get_sensors') }}" class="btn btn-secondary">← Back to Sensors</a>
+</div>
+
+<div class="grid-2">
+  <!-- Create Sensor Form -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">Register Sensor</span>
+    </div>
+    <div id="alert-row" class="alert alert-danger" style="display:none;">
+      <div id="error-txt"></div>
+    </div>
+
+    <div id="sensor-fields">
+      <input id="_csrf_token" name="_csrf_token" type="hidden" value="{{ csrf_token() }}">
+
+      <div class="form-group">
+        <label for="name">Sensor Name</label>
+        <input id="name" type="text" name="name" placeholder="e.g. sensor-nyc-01" />
+      </div>
+
+      <div class="form-group">
+        <label for="hostname">Hostname / IP</label>
+        <input id="hostname" type="text" name="hostname" placeholder="e.g. 10.0.0.50 or sensor.example.com" />
+      </div>
+
+      <div class="form-group">
+        <label for="honeypot">Honeypot Type</label>
+        <input id="honeypot" type="text" name="honeypot" placeholder="e.g. cowrie, dionaea, kippo..." />
+      </div>
+
+      <button id="create-btn" type="button" class="btn btn-primary">Create Sensor</button>
+    </div>
+
+    <div id="sensor-info" class="mt-24" style="display:none;">
+      <div class="alert alert-success">Sensor registered successfully!</div>
+      <div class="code-block" style="margin-top:12px;">
+        <div id="sensor-id" style="margin-bottom:8px;"></div>
+        <div id="sensor-secret"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Deploy Instructions -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">Quick Deploy</span>
+    </div>
+    <p style="font-size:13px;color:var(--text-secondary);margin-bottom:16px;">
+      Run a deploy script on your target machine to automatically install and configure a honeypot sensor.
+    </p>
+
+    <div class="form-group">
+      <label>1. Go to Deploy Scripts</label>
+      <p style="font-size:12px;color:var(--text-muted);margin-top:4px;">
+        Select a honeypot type from the
+        <a href="{{ url_for('ui.deploy_mgmt') }}">Deploy page</a>
+        and copy the deploy command.
+      </p>
+    </div>
+
+    <div class="form-group">
+      <label>2. Run on target machine</label>
+      <div class="code-block">wget "http://&lt;server-url&gt;/api/script/?text=true&amp;script_id=&lt;id&gt;" -O deploy.sh
+sudo bash deploy.sh &lt;server-url&gt; &lt;api-key&gt;</div>
+    </div>
+
+    <div class="form-group">
+      <label>Server URL</label>
+      <div class="api-key-wrap">
+        <span class="api-key-value" id="server-url">{{ config.SERVER_URL | default(request.host_url.rstrip('/')) }}</span>
+        <button type="button" class="btn btn-secondary btn-sm" data-copy="#server-url">Copy</button>
+      </div>
+    </div>
+
+    <div class="form-group mb-0">
+      <label>API Key</label>
+      <div class="api-key-wrap">
+        <span class="api-key-value" id="deploy-apikey">{{ config.DEPLOY_KEY | default('Configure in Settings') }}</span>
+        <button type="button" class="btn btn-secondary btn-sm" data-copy="#deploy-apikey">Copy</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

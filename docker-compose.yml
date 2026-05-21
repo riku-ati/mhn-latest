@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  mhn:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      - SECRET_KEY=${SECRET_KEY}
+      - SQLALCHEMY_DATABASE_URI=${SQLALCHEMY_DATABASE_URI:-sqlite:///mhn.db}
+      - MONGODB_HOST=${MONGODB_HOST:-mongodb}
+      - MONGODB_PORT=${MONGODB_PORT:-27017}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+    volumes:
+      - ./server/logs:/var/log/mhn
+    depends_on:
+      - mongodb
+      - redis
+    restart: unless-stopped
+
+  mongodb:
+    image: mongo:6.0
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+
+  celery:
+    build: .
+    command: celery -A app.tasks worker --loglevel=info
+    environment:
+      - SECRET_KEY=${SECRET_KEY}
+      - SQLALCHEMY_DATABASE_URI=${SQLALCHEMY_DATABASE_URI:-sqlite:///mhn.db}
+      - MONGODB_HOST=${MONGODB_HOST:-mongodb}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+    depends_on:
+      - mongodb
+      - redis
+    restart: unless-stopped
+
+volumes:
+  mongo_data:

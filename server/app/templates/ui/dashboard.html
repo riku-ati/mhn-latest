@@ -1,0 +1,240 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+
+{% block content %}
+<!-- Stats Row -->
+<div class="stats-grid">
+  <div class="stat-card card-scanline">
+    <div class="stat-label">Attacks (24h)</div>
+    <div class="stat-value">
+      <a href="{{ url_for('ui.get_attacks', hours_ago='24') }}" style="color:inherit;text-decoration:none;">
+        {{ attackcount | number_format }}
+      </a>
+    </div>
+    <div class="stat-sub">sessions recorded</div>
+  </div>
+
+  <div class="stat-card">
+    <div class="stat-label">Active Sensors</div>
+    <div class="stat-value stat-value-blue">
+      {% if top_sensor %}{{ top_sensor | length }}{% else %}0{% endif %}
+    </div>
+    <div class="stat-sub">reporting nodes</div>
+  </div>
+
+  <div class="stat-card">
+    <div class="stat-label">Top Attacker</div>
+    <div class="stat-value stat-value-purple" style="font-size:18px;margin-top:8px;">
+      {% if top_attackers %}
+        <a href="{{ url_for('ui.get_attacks', source_ip=top_attackers[0].source_ip) }}" style="color:inherit;text-decoration:none;">
+          {{ top_attackers[0].source_ip }}
+        </a>
+      {% else %}
+        —
+      {% endif %}
+    </div>
+    <div class="stat-sub">
+      {% if top_attackers %}{{ top_attackers[0].count | number_format }} attacks{% endif %}
+    </div>
+  </div>
+
+  <div class="stat-card">
+    <div class="stat-label">Top Port</div>
+    <div class="stat-value stat-value-warning">
+      {% if top_ports %}
+        <a href="{{ url_for('ui.get_attacks', destination_port=top_ports[0].destination_port) }}" style="color:inherit;text-decoration:none;">
+          {{ top_ports[0].destination_port }}
+        </a>
+      {% else %}
+        —
+      {% endif %}
+    </div>
+    <div class="stat-sub">
+      {% if top_ports %}{{ top_ports[0].count | number_format }} hits{% endif %}
+    </div>
+  </div>
+</div>
+
+<!-- Top Attackers + Top Ports -->
+<div class="grid-2 mb-24">
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">Top 5 Attacker IPs</span>
+      <a href="{{ url_for('ui.get_attacks') }}" class="btn btn-secondary btn-sm">View All</a>
+    </div>
+    <div class="table-wrap">
+      {% if top_attackers %}
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>IP Address</th>
+            <th>Attacks</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% set max_count = top_attackers[0].count if top_attackers else 1 %}
+          {% for ip in top_attackers %}
+          <tr>
+            <td class="text-muted" style="font-family:var(--font-mono);font-size:11px;">{{ loop.index }}</td>
+            <td>
+              {% if get_flag_ip(ip.source_ip) %}
+                <img src="{{ get_flag_ip(ip.source_ip) }}" class="flag-icon" alt="">
+              {% endif %}
+              <a href="{{ url_for('ui.get_attacks', source_ip=ip.source_ip) }}" class="ip">{{ ip.source_ip }}</a>
+            </td>
+            <td>
+              <div class="mini-bar-wrap">
+                <div class="mini-bar" style="width:{{ ((ip.count / max_count) * 120)|int }}px;"></div>
+                <span class="mini-bar-count">{{ ip.count | number_format }}</span>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div class="empty-state">
+        <span class="empty-state-icon">🛡</span>
+        <div class="empty-state-text">No attack data yet</div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">Top 5 Attacked Ports</span>
+      <a href="{{ url_for('ui.get_attacks') }}" class="btn btn-secondary btn-sm">View All</a>
+    </div>
+    <div class="table-wrap">
+      {% if top_ports %}
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Port</th>
+            <th>Hits</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% set max_port_count = top_ports[0].count if top_ports else 1 %}
+          {% for port in top_ports %}
+          <tr>
+            <td class="text-muted" style="font-family:var(--font-mono);font-size:11px;">{{ loop.index }}</td>
+            <td>
+              <a href="{{ url_for('ui.get_attacks', destination_port=port.destination_port) }}" class="badge badge-blue">
+                {{ port.destination_port }}
+              </a>
+            </td>
+            <td>
+              <div class="mini-bar-wrap">
+                <div class="mini-bar" style="width:{{ ((port.count / max_port_count) * 120)|int }}px;background:linear-gradient(90deg,var(--accent-blue),var(--accent-purple));"></div>
+                <span class="mini-bar-count">{{ port.count | number_format }}</span>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div class="empty-state">
+        <span class="empty-state-icon">🔌</span>
+        <div class="empty-state-text">No port data yet</div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<!-- Top Honeypots + Top Sensors + Top Signatures -->
+<div class="grid-3 mb-24">
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">Top Honeypots</span>
+    </div>
+    <div class="table-wrap">
+      {% if top_hp %}
+      <table>
+        <thead>
+          <tr><th>Type</th><th>Attacks</th></tr>
+        </thead>
+        <tbody>
+          {% for hp in top_hp %}
+          <tr>
+            <td>
+              <a href="{{ url_for('ui.get_attacks', honeypot=hp.honeypot) }}" class="hp-badge" data-hp="{{ hp.honeypot }}">{{ hp.honeypot }}</a>
+            </td>
+            <td class="mono">{{ hp.count | number_format }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div class="empty-state"><span class="empty-state-icon">🍯</span><div class="empty-state-text">No data</div></div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">Top Sensors</span>
+    </div>
+    <div class="table-wrap">
+      {% if top_sensor %}
+      <table>
+        <thead>
+          <tr><th>Sensor</th><th>Attacks</th></tr>
+        </thead>
+        <tbody>
+          {% for s in top_sensor %}
+          <tr>
+            <td>
+              <a href="{{ url_for('ui.get_attacks', identifier=s.identifier) }}" class="text-blue">
+                {{ get_sensor_name(s.identifier) }}
+              </a>
+            </td>
+            <td class="mono">{{ s.count | number_format }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div class="empty-state"><span class="empty-state-icon">📡</span><div class="empty-state-text">No sensors</div></div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">Top Signatures</span>
+    </div>
+    <div class="table-wrap">
+      {% if freq_sigs %}
+      <table>
+        <thead>
+          <tr><th>Signature</th><th>Count</th></tr>
+        </thead>
+        <tbody>
+          {% for sig in freq_sigs %}
+          <tr>
+            <td>
+              <a href="{{ url_for('ui.get_feeds', payload=sig['signature'], channel='snort.alerts') }}" class="text-secondary" style="font-size:12px;">
+                {{ sig['signature'] }}
+              </a>
+            </td>
+            <td class="mono">{{ sig['count'] | number_format }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div class="empty-state"><span class="empty-state-icon">✍</span><div class="empty-state-text">No signatures</div></div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

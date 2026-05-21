@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}Sensors{% endblock %}
+{% block page_title %}Sensors{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div class="page-header-left">
+    <div class="section-title">Sensor Network</div>
+    <div class="section-subtitle">Honeypot nodes reporting to this server</div>
+  </div>
+  <a href="{{ url_for('ui.add_sensor') }}" class="btn btn-primary">+ Add Sensor</a>
+</div>
+
+<input id="_csrf_token" name="_csrf_token" type="hidden" value="{{ csrf_token() }}">
+
+{% if sensors.items %}
+<div class="sensors-grid" id="sensor-table">
+  {% for sr in sensors.items %}
+  <div class="sensor-card">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;">
+      <div class="sensor-name">{{ sr.name or sr.hostname or 'Unnamed Sensor' }}</div>
+      <span class="hp-badge" data-hp="{{ sr.honeypot }}">{{ sr.honeypot }}</span>
+    </div>
+
+    <div class="sensor-attacks">
+      <a href="{{ url_for('ui.get_attacks', identifier=sr.uuid) }}" style="color:inherit;text-decoration:none;">
+        {{ sr.attacks_count | number_format }}
+      </a>
+    </div>
+    <div class="sensor-attacks-label">Total Attacks</div>
+
+    <div class="sensor-meta">
+      <div class="sensor-meta-row">
+        <span class="sensor-meta-label">IP</span>
+        <span class="sensor-meta-value ip">{{ sr.ip }}</span>
+      </div>
+      <div class="sensor-meta-row">
+        <span class="sensor-meta-label">Host</span>
+        <span class="sensor-meta-value">{{ sr.hostname }}</span>
+      </div>
+      <div class="sensor-meta-row">
+        <span class="sensor-meta-label">Created</span>
+        <span class="sensor-meta-value" data-ts="{{ sr.created_date }}">{{ sr.created_date | fdate }}</span>
+      </div>
+    </div>
+
+    <div class="sensor-uuid">UUID: {{ sr.uuid }}</div>
+
+    <div class="sensor-footer">
+      <div style="display:flex;align-items:center;gap:6px;">
+        <input
+          type="text"
+          class="text-edit"
+          data-sensor-id="{{ sr.uuid }}"
+          data-field-name="name"
+          value="{{ sr.name }}"
+          placeholder="Edit name..."
+          style="width:140px;padding:4px 8px;font-size:12px;"
+        />
+      </div>
+      <button
+        class="btn btn-danger btn-sm del-sensor"
+        data-sensor-id="{{ sr.uuid }}"
+        data-confirm="Delete sensor {{ sr.name or sr.uuid }}? This cannot be undone."
+        title="Delete sensor"
+      >
+        Delete
+      </button>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+{% from "pagination.html" import render_pagination %}
+{{ render_pagination(sensors, view, request.args.to_dict()) }}
+
+{% else %}
+<div class="card">
+  <div class="empty-state">
+    <span class="empty-state-icon">📡</span>
+    <div class="empty-state-text">No sensors registered yet.</div>
+    <a href="{{ url_for('ui.add_sensor') }}" class="btn btn-primary" style="margin-top:20px;">Add Your First Sensor</a>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block title %}Deploy{% endblock %}
+{% block page_title %}Deploy Scripts{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div class="page-header-left">
+    <div class="section-title">Honeypot Deploy Scripts</div>
+    <div class="section-subtitle">Create and manage sensor deployment scripts</div>
+  </div>
+</div>
+
+<div class="deploy-layout">
+  <!-- Script List (left panel) -->
+  <div class="script-list">
+    <div class="script-list-header">
+      Scripts
+      <a href="{{ url_for('ui.deploy_mgmt') }}" class="btn btn-primary btn-sm">+ New</a>
+    </div>
+
+    {% for s in scripts %}
+    <div
+      class="script-list-item {% if script and script.id == s.id %}active{% endif %}"
+      data-script-id="{{ s.id }}"
+    >
+      <div class="script-list-name">{{ s.name or 'Untitled Script' }}</div>
+      <div class="script-list-date">{{ s.date | fdate if s.date else '' }}</div>
+    </div>
+    {% else %}
+    <div style="padding:20px;text-align:center;color:var(--text-muted);font-size:12px;">
+      No scripts yet
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- Script Editor (right panel) -->
+  <div class="script-editor">
+    {% if script %}
+      <div class="script-editor-header">
+        <span class="card-title">
+          {% if script.id %}Edit Script{% else %}New Script{% endif %}
+        </span>
+        <div style="display:flex;gap:8px;">
+          <button type="button" id="submit-script" class="btn btn-primary btn-sm">
+            {% if script.id %}Update{% else %}Create{% endif %}
+          </button>
+          {% if script.id %}
+          <a
+            href="{{ url_for('ui.deploy_mgmt', script_id=script.id) }}"
+            class="btn btn-danger btn-sm"
+            data-confirm="Delete this script?"
+          >Delete</a>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="script-editor-body">
+        <div id="script-alert" class="alert" style="display:none;"></div>
+
+        <!-- Deploy command (for existing scripts) -->
+        {% if script.id %}
+        <div class="form-group">
+          <label>Deploy Command</label>
+          <div class="code-block" id="deploy-cmd">wget "{{ config.SERVER_URL | default('http://your-server') }}/api/script/?text=true&script_id={{ script.id }}" -O deploy.sh && sudo bash deploy.sh {{ config.SERVER_URL | default('http://your-server') }} {{ config.DEPLOY_KEY | default('API_KEY') }}</div>
+          <button type="button" class="btn btn-secondary btn-sm" data-copy="#deploy-cmd" style="margin-top:8px;">Copy Command</button>
+        </div>
+        <div class="divider"></div>
+        {% endif %}
+
+        <form id="script-form" method="post" action="{{ url_for('api.create_script') }}">
+          <input id="_csrf_token" name="_csrf_token" type="hidden" value="{{ csrf_token() }}">
+          {% if script.id %}
+            <input id="id-edit" type="hidden" value="{{ script.id }}">
+          {% endif %}
+
+          <div class="form-group">
+            <label for="name-edit">Script Name</label>
+            <input
+              id="name-edit"
+              type="text"
+              placeholder="e.g. Deploy Cowrie SSH Honeypot"
+              value="{{ script.name or '' }}"
+            />
+          </div>
+
+          <div class="form-group">
+            <label for="notes-edit">Notes</label>
+            <textarea id="notes-edit" rows="3" placeholder="Optional notes about this script...">{{ script.notes or '' }}</textarea>
+          </div>
+
+          <div class="form-group">
+            <label for="script-edit">Script Content</label>
+            <textarea id="script-edit" rows="22" style="min-height:350px;">{{ script.script or '' }}</textarea>
+          </div>
+        </form>
+      </div>
+    {% else %}
+    <div class="empty-state" style="padding:80px 40px;">
+      <span class="empty-state-icon">💻</span>
+      <div class="empty-state-text">Select a script from the list or create a new one</div>
+      <a href="{{ url_for('ui.deploy_mgmt') }}" class="btn btn-primary" style="margin-top:20px;">+ New Script</a>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

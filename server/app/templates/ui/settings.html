@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+{% block title %}Settings{% endblock %}
+{% block page_title %}Settings{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div class="page-header-left">
+    <div class="section-title">Settings</div>
+    <div class="section-subtitle">System configuration and user management</div>
+  </div>
+</div>
+
+<input id="_csrf_token" name="_csrf_token" type="hidden" value="{{ csrf_token() }}">
+
+<!-- API Key Section -->
+<div class="settings-section">
+  <div class="settings-section-title">API Key</div>
+  <div class="card">
+    <div class="form-group mb-0">
+      <label>Your API Key</label>
+      <div class="api-key-wrap">
+        <span class="api-key-value" id="api-key-value">{{ apikey.api_key }}</span>
+        <button type="button" class="btn btn-secondary btn-sm" data-copy="#api-key-value">Copy</button>
+      </div>
+      <div class="stat-sub" style="margin-top:8px;">Use this key when deploying sensors. Keep it secret.</div>
+    </div>
+  </div>
+</div>
+
+<!-- Current User Info -->
+<div class="settings-section">
+  <div class="settings-section-title">Your Account</div>
+  <div class="card">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;">
+      <div style="width:40px;height:40px;border-radius:50%;background:rgba(0,255,136,0.15);display:flex;align-items:center;justify-content:center;color:var(--accent-green);font-weight:700;">
+        {{ current_user.email[0].upper() }}
+      </div>
+      <div>
+        <div style="font-weight:600;color:var(--text-primary);">{{ current_user.email }}</div>
+        <div style="font-size:12px;color:var(--text-muted);">Administrator</div>
+      </div>
+    </div>
+    <a href="{{ url_for('auth.change_password') }}" class="btn btn-secondary btn-sm">Change Password</a>
+  </div>
+</div>
+
+<!-- Users Table -->
+<div class="settings-section">
+  <div class="settings-section-title">Users</div>
+  <div class="card" style="padding:0;margin-bottom:20px;">
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Email</th>
+            <th>Status</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for u in users %}
+          <tr>
+            <td>
+              <span style="font-weight:500;">{{ u.email }}</span>
+              {% if u == current_user %}
+                <span class="badge badge-green" style="margin-left:8px;font-size:10px;">You</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if u.active %}
+                <span class="badge badge-green">Active</span>
+              {% else %}
+                <span class="badge badge-muted">Inactive</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if u != current_user %}
+                <a
+                  href="{{ url_for('auth.delete_user', user_id=u.id) }}"
+                  class="btn btn-danger btn-sm delete-user"
+                  data-user-id="{{ u.id }}"
+                  data-confirm="Delete user {{ u.email }}?"
+                >Delete</a>
+              {% else %}
+                <span class="text-muted" style="font-size:12px;">—</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="3" class="text-muted" style="text-align:center;padding:20px;">No users found</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Add User Form -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">Add New User</span>
+    </div>
+    <div id="user-alert" class="alert" style="display:none;"></div>
+    <form id="user-form" action="{{ url_for('auth.create_user') }}" method="post">
+      <input id="_csrf_token" name="_csrf_token" type="hidden" value="{{ csrf_token() }}">
+      <div class="grid-2">
+        <div class="form-group">
+          <label for="email-edit">Email Address</label>
+          <input id="email-edit" name="email" type="email" placeholder="user@example.com" />
+        </div>
+        <div class="form-group">
+          <label for="password-edit">Password</label>
+          <input id="password-edit" name="password" type="password" placeholder="Secure password..." />
+        </div>
+      </div>
+      <button id="submit-user" type="submit" class="btn btn-primary">Create User</button>
+    </form>
+  </div>
+</div>
+
+<!-- Change Password (for settings page inline) -->
+<div class="settings-section">
+  <div class="settings-section-title">Change Your Password</div>
+  <div class="card">
+    <div id="pass-alert" class="alert" style="display:none;"></div>
+    <form id="change-pass-form" action="{{ url_for('auth.change_passwd', user_id=current_user.id) }}" method="post">
+      <input id="_csrf_token" name="_csrf_token" type="hidden" value="{{ csrf_token() }}">
+      <input id="email-edit" name="email" type="hidden" value="{{ current_user.email }}" />
+      <div class="grid-2">
+        <div class="form-group">
+          <label for="password-change-edit">New Password</label>
+          <input id="password-change-edit" name="password" type="password" placeholder="New password..." />
+        </div>
+        <div class="form-group">
+          <label for="password-repeat-edit">Confirm Password</label>
+          <input id="password-repeat-edit" name="password-repeat" type="password" placeholder="Repeat new password..." />
+        </div>
+      </div>
+      <button id="submit-pass" type="submit" class="btn btn-primary">Change Password</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

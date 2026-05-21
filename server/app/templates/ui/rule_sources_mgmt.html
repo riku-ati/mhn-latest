@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}Rule Sources{% endblock %}
+{% block page_title %}Rule Sources{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div class="page-header-left">
+    <div class="section-title">Rule Sources</div>
+    <div class="section-subtitle">Manage external Snort rule feed URLs</div>
+  </div>
+  <a href="{{ url_for('ui.get_rules') }}" class="btn btn-secondary">← Back to Rules</a>
+</div>
+
+<input id="_csrf_token" name="_csrf_token" type="hidden" value="{{ csrf_token() }}">
+
+<!-- Add Source Form -->
+<div class="card mb-24">
+  <div class="card-header">
+    <span class="card-title">Add Rule Source</span>
+  </div>
+  <div id="src-alert" class="alert" style="display:none;"></div>
+  <form id="src-form">
+    <div class="rule-source-form">
+      <div class="form-group mb-0">
+        <label>Name</label>
+        <input type="text" id="src-name" placeholder="e.g. Emerging Threats" />
+      </div>
+      <div class="form-group mb-0">
+        <label>URI</label>
+        <input type="text" id="src-uri" placeholder="https://rules.example.com/rules.tar.gz" />
+      </div>
+      <div class="form-group mb-0">
+        <label>Notes</label>
+        <input type="text" id="src-note" placeholder="Optional notes" />
+      </div>
+      <div class="form-group mb-0" style="display:flex;align-items:flex-end;">
+        <button id="add-src" type="button" class="btn btn-primary w-full">Add Source</button>
+      </div>
+    </div>
+  </form>
+</div>
+
+<!-- Sources Table -->
+<div class="card" style="padding:0;">
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>URI</th>
+          <th>Notes</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if rule_sources %}
+          {% for rs in rule_sources %}
+          <tr>
+            <td style="font-weight:600;">{{ rs.name }}</td>
+            <td class="mono" style="font-size:11px;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{{ rs.uri }}">
+              <a href="{{ rs.uri }}" target="_blank" class="text-blue">{{ rs.uri }}</a>
+            </td>
+            <td class="text-secondary" style="font-size:12px;">{{ rs.note or '—' }}</td>
+            <td>
+              <button
+                class="btn btn-danger btn-sm del-rs"
+                data-rs-id="{{ rs.id }}"
+                data-confirm="Delete rule source '{{ rs.name }}'?"
+              >Delete</button>
+            </td>
+          </tr>
+          {% endfor %}
+        {% else %}
+          <tr>
+            <td colspan="4">
+              <div class="empty-state">
+                <span class="empty-state-icon">📋</span>
+                <div class="empty-state-text">No rule sources configured</div>
+              </div>
+            </td>
+          </tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

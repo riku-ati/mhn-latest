@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% block title %}Attacks{% endblock %}
+{% block page_title %}Attacks{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div class="page-header-left">
+    <div class="section-title">Attack Log</div>
+    <div class="section-subtitle">Live sessions captured by honeypot sensors</div>
+  </div>
+</div>
+
+<!-- Filter Toolbar -->
+<form id="attack-filter" action="" method="get">
+  <div class="toolbar">
+    <div class="search-input">
+      <input
+        type="text"
+        name="source_ip"
+        value="{{ source_ip }}"
+        placeholder="Source IP..."
+        class="debounce-search"
+        data-form="#attack-filter"
+      />
+    </div>
+
+    <select name="honeypot" class="filter-select">
+      <option value="">All Honeypots</option>
+      {% if settings is defined %}
+        {% for pot in settings.supported_honeypots %}
+          <option {% if pot == honeypot %}selected{% endif %} value="{{ pot }}">{{ pot }}</option>
+        {% endfor %}
+      {% endif %}
+    </select>
+
+    <select name="identifier" class="filter-select">
+      <option value="">All Sensors</option>
+      {% for s in sensors %}
+        <option {% if s.uuid == identifier %}selected{% endif %} value="{{ s.uuid }}">
+          {{ s.name or s.hostname or s.uuid }}
+        </option>
+      {% endfor %}
+    </select>
+
+    <input type="text" name="destination_port" value="{{ destination_port }}" placeholder="Port..." class="filter-select" style="width:90px;">
+
+    <input type="text" name="timestamp" value="{{ timestamp }}" placeholder="MM-DD-YYYY" class="filter-select" style="width:130px;">
+
+    <button type="submit" class="btn btn-primary">Filter</button>
+
+    {% if source_ip or honeypot or identifier or destination_port or timestamp %}
+      <a href="{{ url_for('ui.get_attacks') }}" class="btn btn-secondary">Clear</a>
+    {% endif %}
+  </div>
+</form>
+
+<!-- Attacks Table -->
+<div class="card" style="padding:0;">
+  <div class="table-wrap">
+    <table id="attacks-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Timestamp</th>
+          <th>Sensor</th>
+          <th>Country</th>
+          <th>Source IP</th>
+          <th>Src Port</th>
+          <th>Dst Port</th>
+          <th>Protocol</th>
+          <th>Honeypot</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for at in attacks.items %}
+        <tr data-ip="{{ at.source_ip }}">
+          <td class="text-muted mono" style="font-size:11px;">{{ loop.index }}</td>
+          <td class="mono" style="font-size:11px;" data-ts="{{ at.timestamp }}">{{ at.timestamp | fdate }}</td>
+          <td class="text-secondary" style="font-size:12px;">{{ get_sensor_name(at.identifier) }}</td>
+          <td>
+            {% if get_flag_ip(at.source_ip) %}
+              <img src="{{ get_flag_ip(at.source_ip) }}" class="flag-icon" alt="" title="{{ at.source_ip }}">
+            {% endif %}
+          </td>
+          <td>
+            <a href="{{ url_for('ui.get_attacks', source_ip=at.source_ip) }}" class="ip">{{ at.source_ip }}</a>
+          </td>
+          <td class="mono">{{ at.source_port }}</td>
+          <td>
+            <a href="{{ url_for('ui.get_attacks', destination_port=at.destination_port) }}" class="badge badge-blue">
+              {{ at.destination_port }}
+            </a>
+          </td>
+          <td class="text-secondary mono" style="font-size:11px;">{{ at.protocol }}</td>
+          <td>
+            <span class="hp-badge" data-hp="{{ at.honeypot }}">{{ at.honeypot }}</span>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="9">
+            <div class="empty-state">
+              <span class="empty-state-icon">🛡</span>
+              <div class="empty-state-text">No attacks match the current filters</div>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% from "pagination.html" import render_pagination %}
+{{ render_pagination(attacks, view, request.args.to_dict()) }}
+{% endblock %}

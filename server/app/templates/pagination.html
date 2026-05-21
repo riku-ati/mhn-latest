@@ -1,0 +1,28 @@
+{% macro render_pagination(items, view, args) %}
+{% if items.has_prev or items.has_next %}
+<div class="pagination">
+  {% if items.has_prev %}
+    {% set _ = args.update({'page': items.prev_num}) %}
+    <a href="{{ url_for(view, **args) }}" class="page-link">← Prev</a>
+  {% else %}
+    <span class="page-link disabled">← Prev</span>
+  {% endif %}
+
+  {% for p in items.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
+    {% if p %}
+      {% set _ = args.update({'page': p}) %}
+      <a href="{{ url_for(view, **args) }}" class="page-link {% if p == items.page %}active{% endif %}">{{ p }}</a>
+    {% else %}
+      <span class="page-link disabled">…</span>
+    {% endif %}
+  {% endfor %}
+
+  {% if items.has_next %}
+    {% set _ = args.update({'page': items.next_num}) %}
+    <a href="{{ url_for(view, **args) }}" class="page-link">Next →</a>
+  {% else %}
+    <span class="page-link disabled">Next →</span>
+  {% endif %}
+</div>
+{% endif %}
+{% endmacro %}

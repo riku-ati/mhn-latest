@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Honeymap{% endblock %}
+{% block page_title %}Honeymap{% endblock %}
+
+{% block content %}
+{% if config.HONEYMAP_URL %}
+<div class="honeymap-wrap">
+  <iframe
+    src="{{ config.HONEYMAP_URL }}"
+    title="Honeymap — Live Attack Map"
+    allowfullscreen
+  ></iframe>
+</div>
+{% else %}
+<div class="card">
+  <div class="honeymap-placeholder">
+    <span class="honeymap-placeholder-icon">🌍</span>
+    <div class="section-title" style="color:var(--text-muted);">Honeymap Not Configured</div>
+    <div class="section-subtitle">
+      Set <code class="mono" style="background:var(--bg-primary);padding:2px 6px;border-radius:4px;">HONEYMAP_URL</code>
+      in your server configuration to enable the live attack map.
+    </div>
+    <a href="{{ url_for('ui.settings') }}" class="btn btn-secondary" style="margin-top:16px;">Go to Settings</a>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
