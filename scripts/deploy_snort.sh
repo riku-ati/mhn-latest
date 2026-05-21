@@ -28,17 +28,32 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y \
     snort3 \
     python3 python3-pip \
     supervisor || {
-    # Fallback: build snort3 if not in apt
+
+    # Fallback: build snort3 from source if not in apt
+    # Resolve the latest release tag from GitHub
+    SNORT3_VERSION=$(curl -s https://api.github.com/repos/snort3/snort3/releases/latest \
+        | grep -oP '"tag_name":\s*"\K[^"]+' | head -1)
+    # Strip leading 'v' if present
+    SNORT3_VERSION=${SNORT3_VERSION#v}
+
+    if [ -z "$SNORT3_VERSION" ]; then
+        # Hard-coded fallback if GitHub API is unreachable
+        SNORT3_VERSION="3.12.2.0"
+    fi
+
+    echo "Building Snort3 ${SNORT3_VERSION} from source..."
+
     DEBIAN_FRONTEND=noninteractive apt-get install -y \
         build-essential libpcap-dev libpcre3-dev libdnet-dev \
         libdumbnet-dev bison flex zlib1g-dev liblzma-dev \
         openssl libssl-dev pkg-config libhwloc-dev cmake \
         cpputest libsqlite3-dev uuid-dev libluajit-5.1-dev \
-        libunwind-dev libfl-dev
+        libunwind-dev libfl-dev curl
+
     cd /tmp
-    wget https://github.com/snort3/snort3/releases/download/3.1.74.0/snort3-3.1.74.0.tar.gz
-    tar xzf snort3-3.1.74.0.tar.gz
-    cd snort3-3.1.74.0
+    wget "https://github.com/snort3/snort3/releases/download/${SNORT3_VERSION}/snort3-${SNORT3_VERSION}.tar.gz"
+    tar xzf "snort3-${SNORT3_VERSION}.tar.gz"
+    cd "snort3-${SNORT3_VERSION}"
     ./configure_cmake.sh --prefix=/usr/local/snort
     cd build && make -j$(nproc) && make install
     ln -sf /usr/local/snort/bin/snort /usr/bin/snort3
