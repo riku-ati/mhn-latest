@@ -24,51 +24,81 @@ server_url=$1
 deploy_key=$2
 
 apt-get update
-DEBIAN_FRONTEND=noninteractive apt-get install -y \
-    snort3 \
-    python3 python3-pip \
-    supervisor || {
+DEBIAN_FRONTEND=noninteractive apt-get install -y python3 python3-pip supervisor
 
-    # Fallback: build snort3 from source if not in apt
-    # Resolve the latest release tag from GitHub
-    SNORT3_VERSION=$(curl -s https://api.github.com/repos/snort3/snort3/releases/latest \
-        | grep -oP '"tag_name":\s*"\K[^"]+' | head -1)
-    # Strip leading 'v' if present
-    SNORT3_VERSION=${SNORT3_VERSION#v}
+# ── Try apt install first ───────────────────────────────────────────────────
+SNORT_BIN=""
+if DEBIAN_FRONTEND=noninteractive apt-get install -y snort3 2>/dev/null; then
+    # apt package installs the binary as 'snort' (not 'snort3')
+    SNORT_BIN=$(command -v snort3 2>/dev/null || command -v snort 2>/dev/null || true)
+fi
 
-    if [ -z "$SNORT3_VERSION" ]; then
-        # Hard-coded fallback if GitHub API is unreachable
-        SNORT3_VERSION="3.12.2.0"
-    fi
-
-    echo "Building Snort3 ${SNORT3_VERSION} from source..."
+# ── Source build fallback ───────────────────────────────────────────────────
+if [ -z "$SNORT_BIN" ]; then
+    echo "snort3 not in apt — building from source..."
 
     DEBIAN_FRONTEND=noninteractive apt-get install -y \
-        build-essential libpcap-dev libpcre3-dev libdnet-dev \
-        libdumbnet-dev bison flex zlib1g-dev liblzma-dev \
-        openssl libssl-dev pkg-config libhwloc-dev cmake \
-        cpputest libsqlite3-dev uuid-dev libluajit-5.1-dev \
-        libunwind-dev libfl-dev curl
+        build-essential cmake pkg-config autoconf libtool \
+        libpcap-dev libpcre3-dev \
+        libdnet-dev libdumbnet-dev \
+        bison flex \
+        zlib1g-dev liblzma-dev \
+        openssl libssl-dev \
+        libhwloc-dev \
+        cpputest libsqlite3-dev uuid-dev \
+        libluajit-5.1-dev libunwind-dev libfl-dev curl
+
+    # ── Build libdaq (provides DAQ_Msg_h etc.) ──────────────────────────────
+    LIBDAQ_VERSION=$(curl -s https://api.github.com/repos/snort3/libdaq/releases/latest \
+        | grep -oP '"tag_name":\s*"\K[^"]+' | head -1)
+    LIBDAQ_VERSION=${LIBDAQ_VERSION#v}
+    [ -z "$LIBDAQ_VERSION" ] && LIBDAQ_VERSION="3.0.16"
 
     cd /tmp
-    # Use the GitHub auto-generated source archive (always present for every tag;
-    # the releases/download/ URL only works if a tarball asset was manually attached)
+    wget "https://github.com/snort3/libdaq/archive/refs/tags/${LIBDAQ_VERSION}.tar.gz" \
+         -O "libdaq-${LIBDAQ_VERSION}.tar.gz"
+    tar xzf "libdaq-${LIBDAQ_VERSION}.tar.gz"
+    cd "libdaq-${LIBDAQ_VERSION}"
+    ./bootstrap
+    ./configure --prefix=/usr/local
+    make -j$(nproc)
+    make install
+    ldconfig
+
+    # ── Build snort3 ────────────────────────────────────────────────────────
+    SNORT3_VERSION=$(curl -s https://api.github.com/repos/snort3/snort3/releases/latest \
+        | grep -oP '"tag_name":\s*"\K[^"]+' | head -1)
+    SNORT3_VERSION=${SNORT3_VERSION#v}
+    [ -z "$SNORT3_VERSION" ] && SNORT3_VERSION="3.12.2.0"
+
+    echo "Building Snort3 ${SNORT3_VERSION}..."
+    cd /tmp
+    # Use GitHub auto-generated source archive (releases/download has no tarball asset)
     wget "https://github.com/snort3/snort3/archive/refs/tags/${SNORT3_VERSION}.tar.gz" \
          -O "snort3-${SNORT3_VERSION}.tar.gz"
     tar xzf "snort3-${SNORT3_VERSION}.tar.gz"
     cd "snort3-${SNORT3_VERSION}"
     ./configure_cmake.sh --prefix=/usr/local/snort
     cd build && make -j$(nproc) && make install
-    ln -sf /usr/local/snort/bin/snort /usr/bin/snort3
-}
+    ldconfig
 
-# Install hpfeeds Python client for bridge
+    SNORT_BIN=/usr/local/snort/bin/snort
+fi
+
+echo "Snort binary: ${SNORT_BIN}"
+
+# ── Detect DAQ plugin directory (varies by install method and arch) ─────────
+DAQ_DIR=$(find /usr/lib /usr/local/lib -type d -name "daq" 2>/dev/null | head -1 || true)
+DAQ_FLAG=""
+[ -n "$DAQ_DIR" ] && DAQ_FLAG="--daq-dir ${DAQ_DIR}"
+
+# ── Install hpfeeds bridge ──────────────────────────────────────────────────
 pip3 install hpfeeds
 
 mkdir -p /var/log/snort /etc/snort/rules
 
 # Write minimal snort3 config with JSON alert output
-cat > /etc/snort/snort.lua << EOF
+cat > /etc/snort/snort.lua << 'LUAEOF'
 HOME_NET = 'any'
 EXTERNAL_NET = 'any'
 
@@ -85,9 +115,8 @@ alert_json =
     output = '/var/log/snort/alert.json',
     fields = 'seconds action class b64_data dir dst_addr dst_port eth_dst eth_len eth_src eth_type gid iface ip_id ip_len msg mpls pkt_gen pkt_len pkt_num priority proto rule service sid src_addr src_port tos ttl udp_len vlan rev'
 }
-EOF
+LUAEOF
 
-mkdir -p /etc/snort/rules
 touch /etc/snort/rules/snort.rules
 
 # Register sensor with MHN server
@@ -95,7 +124,7 @@ wget "$server_url/static/registration.txt" -O /tmp/registration.sh
 chmod 755 /tmp/registration.sh
 . /tmp/registration.sh "$server_url" "$deploy_key" "snort"
 
-# Write hpfeeds bridge script (tails alert.json and publishes to hpfeeds)
+# Write hpfeeds bridge script
 cat > /opt/snort-hpfeeds.py << EOF
 #!/usr/bin/env python3
 """Tail snort3 alert_json output and publish to hpfeeds."""
@@ -125,7 +154,6 @@ def main():
     while not os.path.exists(ALERT_LOG):
         print("Waiting for alert.json...")
         time.sleep(3)
-
     while True:
         try:
             hpc = hpfeeds.new(HPF_HOST, HPF_PORT, HPF_IDENT, HPF_SECRET)
@@ -148,10 +176,10 @@ chmod +x /opt/snort-hpfeeds.py
 # Pull MHN rules
 wget "$server_url/static/mhn.rules" -O /etc/snort/rules/snort.rules 2>/dev/null || true
 
-# Supervisor config
+# Supervisor config — use detected binary and DAQ path
 cat > /etc/supervisor/conf.d/snort.conf << EOF
 [program:snort]
-command=/usr/bin/snort3 -c /etc/snort/snort.lua -i ${INTERFACE} --daq-dir /usr/lib/x86_64-linux-gnu/daq
+command=${SNORT_BIN} -c /etc/snort/snort.lua -i ${INTERFACE} ${DAQ_FLAG}
 directory=/var/log/snort
 stdout_logfile=/var/log/snort/snort.out
 stderr_logfile=/var/log/snort/snort.err
@@ -168,9 +196,9 @@ autorestart=true
 EOF
 
 # Daily rule update cron
-cat > /etc/cron.daily/update_snort_rules << 'CRON'
+cat > /etc/cron.daily/update_snort_rules << CRON
 #!/bin/bash
-wget -q "$server_url/static/mhn.rules" -O /etc/snort/rules/snort.rules.tmp && \
+wget -q "${server_url}/static/mhn.rules" -O /etc/snort/rules/snort.rules.tmp && \
     mv /etc/snort/rules/snort.rules.tmp /etc/snort/rules/snort.rules && \
     supervisorctl restart snort
 CRON
@@ -184,7 +212,8 @@ supervisorctl start snort-hpfeeds
 
 echo ""
 echo "=== Snort3 deploy complete ==="
-echo "Manage with supervisorctl, not service/systemctl:"
+echo "Binary: ${SNORT_BIN}"
+echo "Manage with supervisorctl (not service/systemctl):"
 echo "  supervisorctl status"
 echo "  supervisorctl restart snort"
 echo "  supervisorctl tail -f snort"
