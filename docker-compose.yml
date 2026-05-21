@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   mhn:
     build: .
@@ -7,16 +5,42 @@ services:
       - "8080:8080"
     environment:
       - SECRET_KEY=${SECRET_KEY}
-      - SQLALCHEMY_DATABASE_URI=${SQLALCHEMY_DATABASE_URI:-sqlite:///mhn.db}
+      - SQLALCHEMY_DATABASE_URI=${SQLALCHEMY_DATABASE_URI:-sqlite:////app/db/mhn.db}
       - MONGODB_HOST=${MONGODB_HOST:-mongodb}
       - MONGODB_PORT=${MONGODB_PORT:-27017}
       - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - DEPLOY_KEY=${DEPLOY_KEY}
+      - SERVER_BASE_URL=${SERVER_BASE_URL:-http://localhost:8080}
     volumes:
       - ./server/logs:/var/log/mhn
       - mhn_db:/app/db
     depends_on:
       - mongodb
       - redis
+    restart: unless-stopped
+
+  hpfeeds-broker:
+    build: .
+    command: python -m hpfeeds.scripts.broker --bind 0.0.0.0:10000 --auth mongodb://mongodb:27017/hpfeeds
+    ports:
+      - "10000:10000"
+    depends_on:
+      - mongodb
+    restart: unless-stopped
+
+  mnemosyne:
+    build: .
+    command: python mnemosyne.py
+    environment:
+      - MONGODB_HOST=${MONGODB_HOST:-mongodb}
+      - MONGODB_PORT=${MONGODB_PORT:-27017}
+      - HPF_HOST=hpfeeds-broker
+      - HPF_PORT=10000
+      - HPF_IDENT=mnemosyne
+      - HPF_SECRET=${MNEMOSYNE_SECRET:-mnemosyne-secret}
+    depends_on:
+      - hpfeeds-broker
+      - mongodb
     restart: unless-stopped
 
   mongodb:
@@ -38,9 +62,12 @@ services:
     command: celery -A app.tasks worker --loglevel=info
     environment:
       - SECRET_KEY=${SECRET_KEY}
-      - SQLALCHEMY_DATABASE_URI=${SQLALCHEMY_DATABASE_URI:-sqlite:///mhn.db}
+      - SQLALCHEMY_DATABASE_URI=${SQLALCHEMY_DATABASE_URI:-sqlite:////app/db/mhn.db}
       - MONGODB_HOST=${MONGODB_HOST:-mongodb}
       - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - DEPLOY_KEY=${DEPLOY_KEY}
+    volumes:
+      - mhn_db:/app/db
     depends_on:
       - mongodb
       - redis

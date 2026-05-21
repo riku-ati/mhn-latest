@@ -1,0 +1,69 @@
+#!/bin/bash
+# registration.txt — downloaded by honeypot deploy scripts
+# Registers this node as a sensor with the MHN server and exports HPF_* vars.
+
+if [ $# -ne 3 ]
+    then
+        echo "Wrong number of arguments supplied."
+        echo "Usage: sh $0 <server_url> <deploy_key> <honeypot_type>."
+        exit 1
+fi
+
+server_url=$1
+deploy_key=$2
+honeypot=$3
+hostname=$(hostname)
+
+# Install curl if missing
+if [ -f /etc/debian_version ]; then
+    command -v curl >/dev/null 2>&1 || apt-get install -y curl
+elif [ -f /etc/redhat-release ]; then
+    command -v curl >/dev/null 2>&1 || yum -y install curl
+fi
+
+# Register sensor with MHN server
+curl -s -X POST \
+    -H "Content-Type: application/json" \
+    -d "{
+        \"name\": \"${hostname}-${honeypot}\",
+        \"hostname\": \"${hostname}\",
+        \"deploy_key\": \"${deploy_key}\",
+        \"honeypot\": \"${honeypot}\"
+    }" \
+    "${server_url}/api/sensor/" > /tmp/mhn_deploy.json
+
+echo "Sensor registration response:"
+cat /tmp/mhn_deploy.json
+echo ""
+
+# Parse UUID — try python3 first, then python
+if command -v python3 >/dev/null 2>&1; then
+    PYTHON=python3
+elif command -v python >/dev/null 2>&1; then
+    PYTHON=python
+else
+    echo "ERROR: No python found. Install python3."
+    exit 1
+fi
+
+uuid=$($PYTHON -c "import json; d=json.load(open('/tmp/mhn_deploy.json')); print(d['uuid'])" 2>/dev/null)
+
+if [ -z "$uuid" ]; then
+    echo "ERROR: Could not register sensor. Response:"
+    cat /tmp/mhn_deploy.json
+    echo ""
+    echo "Check that DEPLOY_KEY is correct and MHN server is reachable at ${server_url}"
+    exit 1
+fi
+
+echo "Sensor registered: $uuid"
+
+# Export hpfeeds connection variables
+export HPF_HOST=$(echo "$server_url" | sed 's#^http://##; s#^https://##; s#/.*$##; s/:.*$//')
+export HPF_PORT="10000"
+export HPF_IDENT=$($PYTHON -c "import json; d=json.load(open('/tmp/mhn_deploy.json')); print(d['identifier'])")
+export HPF_SECRET=$($PYTHON -c "import json; d=json.load(open('/tmp/mhn_deploy.json')); print(d['secret'])")
+
+echo "HPF_HOST=$HPF_HOST"
+echo "HPF_PORT=$HPF_PORT"
+echo "HPF_IDENT=$HPF_IDENT"
