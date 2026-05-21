@@ -1,154 +1,203 @@
 #!/bin/bash
+# deploy_suricata.sh — Suricata IDS with hpfeeds bridge
+# Tested on Ubuntu 20.04 / 22.04
+# Uses OISF PPA for current Suricata; a Python3 bridge tails eve.json → hpfeeds.
 
-INTERFACE=$(basename -a /sys/class/net/e*)
+INTERFACE=$(ip route get 1.1.1.1 2>/dev/null | grep -oP 'dev \K\S+' | head -1)
 
 set -e
 set -x
 
-if [ $# -ne 2 ]
-    then
-        if [ $# -eq 3 ]
-          then
-            INTERFACE=$3
-          else
-            echo "Wrong number of arguments supplied."
-            echo "Usage: $0 <server_url> <deploy_key>."
-            exit 1
-        fi
-
+if [ $# -lt 2 ]; then
+    echo "Wrong number of arguments supplied."
+    echo "Usage: $0 <server_url> <deploy_key> [interface]"
+    exit 1
 fi
 
-compareint=$(echo "$INTERFACE" | wc -w)
+[ $# -ge 3 ] && INTERFACE=$3
 
-
-if [ "$INTERFACE" = "e*" ] || [ "$compareint" -ne 1 ]
-    then
-        echo "No Interface selectable, please provide manually."
-        echo "Usage: $0 <server_url> <deploy_key> <INTERFACE>"
-        exit 1
+if [ -z "$INTERFACE" ]; then
+    echo "Could not detect network interface. Provide it as third argument."
+    echo "Usage: $0 <server_url> <deploy_key> <interface>"
+    exit 1
 fi
-
 
 server_url=$1
 deploy_key=$2
 
+# Install Suricata from OISF PPA (current stable)
 apt-get update
-DEBIAN_FRONTEND=noninteractive apt-get -y install build-essential libpcap-dev libjansson-dev libpcre3-dev libdnet-dev libdumbnet-dev libdaq-dev flex bison python-pip git make automake libtool zlib1g-dev python-dev libnetfilter-queue-dev libnetfilter-queue1 libnfnetlink-dev libnfnetlink0 libyaml-dev libmagic-dev autoconf libpcre3 libpcre3-dbg libnet1-dev libyaml-0-2 pkg-config zlib1g libcap-ng-dev libcap-ng0
+DEBIAN_FRONTEND=noninteractive apt-get install -y software-properties-common
+add-apt-repository -y ppa:oisf/suricata-stable
+apt-get update
+DEBIAN_FRONTEND=noninteractive apt-get install -y suricata suricata-update \
+    python3 python3-pip supervisor
 
-pip install --upgrade distribute
-pip install pyyaml
+# Install hpfeeds Python client for bridge
+pip3 install hpfeeds
 
-# Install hpfeeds and required libs...
+# Update Suricata rules
+suricata-update
 
-cd /tmp
-rm -rf libev*
-wget https://github.com/pwnlandia/hpfeeds/releases/download/libev-4.15/libev-4.15.tar.gz
-tar zxvf libev-4.15.tar.gz 
-cd libev-4.15
-./configure && make && make install
-ldconfig
+# Configure Suricata to write EVE JSON (used by hpfeeds bridge)
+cat > /etc/suricata/suricata.yaml << EOF
+%YAML 1.1
+---
+vars:
+  address-groups:
+    HOME_NET: "[192.168.0.0/16,10.0.0.0/8,172.16.0.0/12]"
+    EXTERNAL_NET: "!\$HOME_NET"
+  port-groups:
+    HTTP_PORTS: "80"
+    SHELLCODE_PORTS: "!80"
+    ORACLE_PORTS: 1521
+    SSH_PORTS: 22
+    DNP3_PORTS: 20000
+    MODBUS_PORTS: 502
 
-cd /tmp
-rm -rf hpfeeds
-git clone https://github.com/pwnlandia/hpfeeds.git
-cd hpfeeds/appsupport/libhpfeeds
-autoreconf --install
-./configure && make && make install 
-ldconfig
+default-log-dir: /var/log/suricata/
 
-cd /tmp
-rm -rf htp*
-wget https://github.com/ironbee/libhtp/releases/download/0.5.15/htp-0.5.15.tar.gz
-tar -xzvf htp-0.5.15.tar.gz
-cd htp-0.5.15
-./configure && make && make install
-ldconfig
+outputs:
+  - eve-log:
+      enabled: yes
+      filetype: regular
+      filename: eve.json
+      types:
+        - alert:
+            payload: yes
+            payload-buffer-size: 4kb
+            http-body: yes
+            http-body-printable: yes
+            metadata: yes
+            tagged-packets: yes
+        - drop:
+            alerts: yes
+        - http:
+            extended: yes
+        - dns:
+        - tls:
+            extended: yes
+        - ssh
+        - stats:
+            totals: yes
+            threads: no
+            deltas: no
+        - flow
+  - fast:
+      enabled: no
 
-mkdir -p /opt/suricata/etc/suricata/rules /opt/mhn/rules/
+af-packet:
+  - interface: ${INTERFACE}
+    cluster-id: 99
+    cluster-type: cluster_flow
+    defrag: yes
 
-cd /tmp
-rm -rf suricata
-git clone -b hpfeeds-support https://github.com/threatstream/suricata.git
-cd suricata
-./autogen.sh || ./autogen.sh
-export CPPFLAGS=-I/include
-./configure --prefix=/opt/suricata --localstatedir=/var/ --enable-non-bundled-htp 
-make
-make install-full
+app-layer:
+  protocols:
+    tls:
+      enabled: yes
+    dns:
+      enabled: yes
+    http:
+      enabled: yes
+    ftp:
+      enabled: yes
+    ssh:
+      enabled: yes
+    smtp:
+      enabled: yes
 
-# Register the sensor with MHN server.
-wget $server_url/static/registration.txt -O registration.sh
-chmod 755 registration.sh
-# Note: this will export the HPF_* variables
-. ./registration.sh $server_url $deploy_key "suricata"
- 
-cd /opt/suricata/etc/suricata
-#sed -i -r "/\s*- alert-hpfeeds/,/\s*reconnect: yes # do we reconnect if publish fails/d" suricata.yaml
-#sed -i -r "s/^  # hpfeeds output/ # hpfeeds output\n  - alert-hpfeeds:\n      enabled: yes\n      host: $HPF_HOST\n      ident: $HPF_IDENT\n      secret: $HPF_SECRET\n      channel: suricata.events\n      reconnect: yes # do we reconnect if publish fails ?!\n/" suricata.yaml
+detect:
+  profile: medium
+  custom-values:
+    toclient-groups: 3
+    toserver-groups: 25
+  sgh-mpm-context: auto
+  inspection-recursion-limit: 3000
 
-# replace the faulty magic file
-COMMAND="s#magic-file: /usr/share/file/misc/magic#magic-file: /usr/share/file/magic#;"
+default-rule-path: /var/lib/suricata/rules
+rule-files:
+  - suricata.rules
 
-# delete the example hpfeeds config section
-COMMAND+="/  - alert-hpfeeds/,/      reconnect: yes # do we reconnect if publish fails/d;"
+EOF
 
-# replace the hpfeeds section with the vaues from the env vars
-COMMAND+="s/^  # hpfeeds output/"
-COMMAND+="  # hpfeeds output\n"
-COMMAND+="  - alert-hpfeeds:\n"
-COMMAND+="      enabled: yes\n"
-COMMAND+="      host: $HPF_HOST\n"
-COMMAND+="      port: $HPF_PORT\n"
-COMMAND+="      ident: $HPF_IDENT\n"
-COMMAND+="      secret: $HPF_SECRET\n"
-COMMAND+="      channel: suricata.events\n"
-COMMAND+="      reconnect: yes # do we reconnect if publish fails ?!\n/;"
+# Register sensor with MHN server
+wget "$server_url/static/registration.txt" -O /tmp/registration.sh
+chmod 755 /tmp/registration.sh
+. /tmp/registration.sh "$server_url" "$deploy_key" "suricata"
 
-# disable all the rules then enable just the local.rules
-COMMAND+="s/^( - .*\.rules)/#\1/;  s/rule-files:/rule-files:\n - local.rules/"
+# Write hpfeeds bridge script (tails eve.json and publishes alerts to hpfeeds)
+cat > /opt/suricata-hpfeeds.py << EOF
+#!/usr/bin/env python3
+"""Tail suricata eve.json and publish alert events to hpfeeds."""
+import json
+import time
+import os
+import hpfeeds
 
-sed -i -r "$COMMAND" suricata.yaml
+HPF_HOST    = "${HPF_HOST}"
+HPF_PORT    = ${HPF_PORT}
+HPF_IDENT   = "${HPF_IDENT}"
+HPF_SECRET  = "${HPF_SECRET}"
+EVE_LOG     = "/var/log/suricata/eve.json"
+CHANNEL     = "suricata.events"
 
-IP=$(ip -f inet -o addr show $INTERFACE|head -n 1|cut -d\  -f 7 | cut -d/ -f 1)
-sed -i "s#    HOME_NET: \"\[192.168.0.0/16,10.0.0.0/8,172.16.0.0/12\]\"#    HOME_NET: \"[$IP]\"#" suricata.yaml
+def tail(filename):
+    with open(filename) as f:
+        f.seek(0, 2)
+        while True:
+            line = f.readline()
+            if not line:
+                time.sleep(0.1)
+                continue
+            yield line.strip()
 
-# Installing snort rules.
-# mhn.rules will be used as local.rules.
-rm -f /opt/suricata/etc/suricata/rules/local.rules
-ln -s /opt/mhn/rules/mhn-suricata.rules /opt/suricata/etc/suricata/rules/local.rules
+def main():
+    while not os.path.exists(EVE_LOG):
+        print("Waiting for eve.json...")
+        time.sleep(3)
 
-apt-get install -y supervisor
+    while True:
+        try:
+            hpc = hpfeeds.new(HPF_HOST, HPF_PORT, HPF_IDENT, HPF_SECRET)
+            print(f"Connected to hpfeeds broker {HPF_HOST}:{HPF_PORT}")
+            for line in tail(EVE_LOG):
+                try:
+                    rec = json.loads(line)
+                    if rec.get("event_type") == "alert":
+                        hpc.publish(CHANNEL, json.dumps(rec))
+                except Exception as e:
+                    print(f"Parse error: {e}")
+        except Exception as e:
+            print(f"hpfeeds error: {e} — reconnecting in 10s")
+            time.sleep(10)
 
-# Config for supervisor.
-cat > /etc/supervisor/conf.d/suricata.conf <<EOF
+if __name__ == "__main__":
+    main()
+EOF
+chmod +x /opt/suricata-hpfeeds.py
+
+# Supervisor: run suricata + hpfeeds bridge
+cat > /etc/supervisor/conf.d/suricata.conf << EOF
 [program:suricata]
-command=/opt/suricata/bin/suricata -c /opt/suricata/etc/suricata/suricata.yaml -i $INTERFACE
-directory=/opt/suricata
-stdout_logfile=/var/log/suricata.log
-stderr_logfile=/var/log/suricata.err
+command=/usr/bin/suricata -c /etc/suricata/suricata.yaml -i ${INTERFACE}
+directory=/var/log/suricata
+stdout_logfile=/var/log/suricata/suricata.out
+stderr_logfile=/var/log/suricata/suricata.err
 autostart=true
 autorestart=true
-redirect_stderr=true
 stopsignal=QUIT
+
+[program:suricata-hpfeeds]
+command=/usr/bin/python3 /opt/suricata-hpfeeds.py
+stdout_logfile=/var/log/suricata/hpfeeds.out
+stderr_logfile=/var/log/suricata/hpfeeds.err
+autostart=true
+autorestart=true
 EOF
 
-cat > /etc/cron.daily/update_suricata_rules.sh <<EOF
-#!/bin/bash
-
-mkdir -p /opt/mhn/rules
-rm -f /opt/mhn/rules/mhn.rules.tmp
-
-echo "[`date`] Updating suricata signatures ..."
-wget $server_url/static/mhn.rules -O /opt/mhn/rules/mhn-suricata.rules.tmp && \
-	mv /opt/mhn/rules/mhn-suricata.rules.tmp /opt/mhn/rules/mhn-suricata.rules && \
-	(supervisorctl update ; supervisorctl restart suricata ) && \
-	echo "[`date`] Successfully updated suricata signatures" && \
-	exit 0
-
-echo "[`date`] Failed to update suricata signatures"
-exit 1
-EOF
-chmod 755 /etc/cron.daily/update_suricata_rules.sh
-/etc/cron.daily/update_suricata_rules.sh
-
+supervisorctl reread
 supervisorctl update
+supervisorctl start suricata
+sleep 5
+supervisorctl start suricata-hpfeeds

@@ -1,137 +1,162 @@
 #!/bin/bash
+# deploy_snort.sh — Snort 3 IDS with hpfeeds bridge
+# Tested on Ubuntu 20.04 / 22.04
 
-INTERFACE=$(basename -a /sys/class/net/e*)
-
+INTERFACE=$(ip route get 1.1.1.1 2>/dev/null | grep -oP 'dev \K\S+' | head -1)
 
 set -e
 set -x
 
-if [ $# -ne 2 ]
-    then
-        if [ $# -eq 3 ]
-          then
-            INTERFACE=$3
-          else
-            echo "Wrong number of arguments supplied."
-            echo "Usage: $0 <server_url> <deploy_key>."
-            exit 1
-        fi
-
+if [ $# -lt 2 ]; then
+    echo "Wrong number of arguments supplied."
+    echo "Usage: $0 <server_url> <deploy_key> [interface]"
+    exit 1
 fi
 
-compareint=$(echo "$INTERFACE" | wc -w)
+[ $# -ge 3 ] && INTERFACE=$3
 
-
-if [ "$INTERFACE" = "e*" ] || [ "$compareint" -ne 1 ]
-    then
-        echo "No Interface selectable, please provide manually."
-        echo "Usage: $0 <server_url> <deploy_key> <INTERFACE>"
-        exit 1
+if [ -z "$INTERFACE" ]; then
+    echo "Could not detect network interface. Provide as third argument."
+    exit 1
 fi
-
 
 server_url=$1
 deploy_key=$2
 
 apt-get update
-DEBIAN_FRONTEND=noninteractive apt-get -y install build-essential libpcap-dev libjansson-dev libpcre3-dev libdnet-dev libdumbnet-dev libdaq-dev flex bison python-pip git make automake libtool zlib1g-dev
+DEBIAN_FRONTEND=noninteractive apt-get install -y \
+    snort3 \
+    python3 python3-pip \
+    supervisor || {
+    # Fallback: build snort3 if not in apt
+    DEBIAN_FRONTEND=noninteractive apt-get install -y \
+        build-essential libpcap-dev libpcre3-dev libdnet-dev \
+        libdumbnet-dev bison flex zlib1g-dev liblzma-dev \
+        openssl libssl-dev pkg-config libhwloc-dev cmake \
+        cpputest libsqlite3-dev uuid-dev libluajit-5.1-dev \
+        libunwind-dev libfl-dev
+    cd /tmp
+    wget https://github.com/snort3/snort3/releases/download/3.1.74.0/snort3-3.1.74.0.tar.gz
+    tar xzf snort3-3.1.74.0.tar.gz
+    cd snort3-3.1.74.0
+    ./configure_cmake.sh --prefix=/usr/local/snort
+    cd build && make -j$(nproc) && make install
+    ln -sf /usr/local/snort/bin/snort /usr/bin/snort3
+}
 
-pip install --upgrade distribute
-pip install virtualenv
+# Install hpfeeds Python client for bridge
+pip3 install hpfeeds
 
-# Install hpfeeds and required libs...
+mkdir -p /var/log/snort /etc/snort/rules
 
-cd /tmp
-rm -rf libev*
-wget https://github.com/pwnlandia/hpfeeds/releases/download/libev-4.15/libev-4.15.tar.gz
-tar zxvf libev-4.15.tar.gz 
-cd libev-4.15
-./configure && make && make install
-ldconfig
+# Write minimal snort3 config with JSON alert output
+cat > /etc/snort/snort.lua << EOF
+HOME_NET = 'any'
+EXTERNAL_NET = 'any'
 
-cd /tmp
-rm -rf hpfeeds
-git clone https://github.com/pwnlandia/hpfeeds.git
-cd hpfeeds/appsupport/libhpfeeds
-autoreconf --install
-./configure && make && make install 
+ips =
+{
+    include = RULE_PATH .. '/snort.rules',
+    enable_builtin_rules = false,
+    mode = 'alert'
+}
 
-cd /tmp
-rm -rf snort
-git clone -b hpfeeds-support https://github.com/threatstream/snort.git
-export CPPFLAGS=-I/include
-cd snort
-./configure --prefix=/opt/snort && make && make install 
+alert_json =
+{
+    file = true,
+    output = '/var/log/snort/alert.json',
+    fields = 'seconds action class b64_data dir dst_addr dst_port eth_dst eth_len eth_src eth_type gid iface ip_id ip_len msg mpls pkt_gen pkt_len pkt_num priority proto rule service sid src_addr src_port tos ttl udp_len vlan rev'
+}
+EOF
 
-# Register the sensor with the MHN server.
-wget $server_url/static/registration.txt -O registration.sh
-chmod 755 registration.sh
-# Note: this will export the HPF_* variables
-. ./registration.sh $server_url $deploy_key "snort"
+mkdir -p /etc/snort/rules
+touch /etc/snort/rules/snort.rules
 
-mkdir -p /opt/snort/etc /opt/snort/rules /opt/snort/lib/snort_dynamicrules /opt/snort/lib/snort_dynamicpreprocessor /var/log/snort/
-cd etc
-cp snort.conf classification.config reference.config threshold.conf unicode.map /opt/snort/etc/
-touch  /opt/snort/rules/white_list.rules
-touch  /opt/snort/rules/black_list.rules
+# Register sensor with MHN server
+wget "$server_url/static/registration.txt" -O /tmp/registration.sh
+chmod 755 /tmp/registration.sh
+. /tmp/registration.sh "$server_url" "$deploy_key" "snort"
 
-cd /opt/snort/etc/
-# out prefix is /opt/snort not /usr/local...
-sed -i 's#/usr/local/#/opt/snort/#' snort.conf 
+# Write hpfeeds bridge script (tails alert.json and publishes to hpfeeds)
+cat > /opt/snort-hpfeeds.py << EOF
+#!/usr/bin/env python3
+"""Tail snort3 alert_json output and publish to hpfeeds."""
+import json
+import time
+import os
+import hpfeeds
 
+HPF_HOST    = "${HPF_HOST}"
+HPF_PORT    = ${HPF_PORT}
+HPF_IDENT   = "${HPF_IDENT}"
+HPF_SECRET  = "${HPF_SECRET}"
+ALERT_LOG   = "/var/log/snort/alert.json"
+CHANNEL     = "snort.alerts"
 
-# disable all the built in rules
-sed -i -r 's,include \$RULE_PATH/(.*),# include $RULE_PATH/\1,' snort.conf
+def tail(filename):
+    with open(filename) as f:
+        f.seek(0, 2)
+        while True:
+            line = f.readline()
+            if not line:
+                time.sleep(0.1)
+                continue
+            yield line.strip()
 
-# enable our local rules
-sed -i 's,# include $RULE_PATH/local.rules,include $RULE_PATH/local.rules,' snort.conf
+def main():
+    while not os.path.exists(ALERT_LOG):
+        print("Waiting for alert.json...")
+        time.sleep(3)
 
-# enable hpfeeds
-sed -i "s/# hpfeeds/# hpfeeds\noutput log_hpfeeds: host $HPF_HOST, ident $HPF_IDENT, secret $HPF_SECRET, channel snort.alerts, port $HPF_PORT/" snort.conf 
+    while True:
+        try:
+            hpc = hpfeeds.new(HPF_HOST, HPF_PORT, HPF_IDENT, HPF_SECRET)
+            print(f"Connected to hpfeeds broker {HPF_HOST}:{HPF_PORT}")
+            for line in tail(ALERT_LOG):
+                try:
+                    rec = json.loads(line)
+                    hpc.publish(CHANNEL, json.dumps(rec))
+                except Exception as e:
+                    print(f"Parse error: {e}")
+        except Exception as e:
+            print(f"hpfeeds error: {e} — reconnecting in 10s")
+            time.sleep(10)
 
-#Set HOME_NET
+if __name__ == "__main__":
+    main()
+EOF
+chmod +x /opt/snort-hpfeeds.py
 
-IP=$(ip -f inet -o addr show $INTERFACE|head -n 1|cut -d\  -f 7 | cut -d/ -f 1)
-sed -i "/ipvar HOME_NET/c\ipvar HOME_NET $IP" /opt/snort/etc/snort.conf
+# Pull MHN rules
+wget "$server_url/static/mhn.rules" -O /etc/snort/rules/snort.rules 2>/dev/null || true
 
-# Installing snort rules.
-# mhn.rules will be used as local.rules.
-rm -f /etc/snort/rules/local.rules
-ln -s /opt/mhn/rules/mhn.rules /opt/snort/rules/local.rules
-
-# Supervisor will manage snort-hpfeeds
-apt-get install -y supervisor
-
-# Config for supervisor.
-cat > /etc/supervisor/conf.d/snort.conf <<EOF
+# Supervisor config
+cat > /etc/supervisor/conf.d/snort.conf << EOF
 [program:snort]
-command=/opt/snort/bin/snort -c /opt/snort/etc/snort.conf -i $INTERFACE
-directory=/opt/snort
-stdout_logfile=/var/log/snort.log
-stderr_logfile=/var/log/snort.err
+command=/usr/bin/snort3 -c /etc/snort/snort.lua -i ${INTERFACE} --daq-dir /usr/lib/x86_64-linux-gnu/daq
+directory=/var/log/snort
+stdout_logfile=/var/log/snort/snort.out
+stderr_logfile=/var/log/snort/snort.err
 autostart=true
 autorestart=true
-redirect_stderr=true
 stopsignal=QUIT
+
+[program:snort-hpfeeds]
+command=/usr/bin/python3 /opt/snort-hpfeeds.py
+stdout_logfile=/var/log/snort/hpfeeds.out
+stderr_logfile=/var/log/snort/hpfeeds.err
+autostart=true
+autorestart=true
 EOF
 
-cat > /etc/cron.daily/update_snort_rules.sh <<EOF
+# Daily rule update cron
+cat > /etc/cron.daily/update_snort_rules << 'CRON'
 #!/bin/bash
+wget -q "$server_url/static/mhn.rules" -O /etc/snort/rules/snort.rules.tmp && \
+    mv /etc/snort/rules/snort.rules.tmp /etc/snort/rules/snort.rules && \
+    supervisorctl restart snort
+CRON
+chmod 755 /etc/cron.daily/update_snort_rules
 
-mkdir -p /opt/mhn/rules
-rm -f /opt/mhn/rules/mhn.rules.tmp
-
-echo "[`date`] Updating snort signatures ..."
-wget $server_url/static/mhn.rules -O /opt/mhn/rules/mhn.rules.tmp && \
-	mv /opt/mhn/rules/mhn.rules.tmp /opt/mhn/rules/mhn.rules && \
-	(supervisorctl update ; supervisorctl restart snort ) && \
-	echo "[`date`] Successfully updated snort signatures" && \
-	exit 0
-
-echo "[`date`] Failed to update snort signatures"
-exit 1
-EOF
-chmod 755 /etc/cron.daily/update_snort_rules.sh
-/etc/cron.daily/update_snort_rules.sh
-
+supervisorctl reread
 supervisorctl update

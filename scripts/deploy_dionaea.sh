@@ -39,11 +39,8 @@ apt --yes install \
     python3-yaml \
     python3-boto3 
 
-git clone https://github.com/DinoTools/dionaea.git 
+git clone https://github.com/DinoTools/dionaea.git
 cd dionaea
-
-# Latest tested version with this install script
-git checkout baf25d6
 
 mkdir build
 cd build

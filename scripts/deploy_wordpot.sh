@@ -12,15 +12,14 @@ server_url=$1
 deploy_key=$2
 
 apt-get update
-apt-get -y install git python-pip supervisor
-pip install virtualenv
+apt-get -y install git python3 python3-pip python3-venv supervisor
 
 # Get the Wordpot source
 cd /opt
 git clone https://github.com/pwnlandia/wordpot.git
 cd wordpot
 
-virtualenv env
+python3 -m venv env
 . env/bin/activate
 pip install -r requirements.txt
 

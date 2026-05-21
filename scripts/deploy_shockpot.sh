@@ -1,3 +1,5 @@
+#!/bin/bash
+
 set -e
 set -x
 
@@ -12,15 +14,14 @@ server_url=$1
 deploy_key=$2
 
 apt-get update
-apt-get -y install git python-pip supervisor
-pip install virtualenv
+apt-get -y install git python3 python3-pip python3-venv supervisor
 
 # Get the Shockpot source
 cd /opt
 git clone https://github.com/pwnlandia/shockpot.git
 cd shockpot
 
-virtualenv env
+python3 -m venv env
 . env/bin/activate
 pip install -r requirements.txt
 
@@ -58,7 +59,7 @@ EOF
 # Config for supervisor.
 cat > /etc/supervisor/conf.d/shockpot.conf <<EOF
 [program:shockpot]
-command=/opt/shockpot/env/bin/python /opt/shockpot/shockpot.py 
+command=/opt/shockpot/env/bin/python3 /opt/shockpot/shockpot.py
 directory=/opt/shockpot
 stdout_logfile=/opt/shockpot/shockpot.out
 stderr_logfile=/opt/shockpot/shockpot.err

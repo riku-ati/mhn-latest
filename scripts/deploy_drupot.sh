@@ -1,3 +1,5 @@
+#!/bin/bash
+
 set -e
 set -x
 
@@ -12,39 +14,36 @@ server_url=$1
 deploy_key=$2
 
 apt-get update
-apt-get -y install git supervisor
+apt-get -y install git supervisor curl
 
 ####################################################################
-# Install a decent version of golang
-if [ "$(uname -m)" == "x86_64" ] ;
-then
-    GO_PACKAGE="go1.12.7.linux-amd64.tar.gz"
-elif [ "$(uname -m)" == "armv7l" ] || [ "$(uname -m)" == "armv6l" ];
-then
-    GO_PACKAGE="go1.12.7.linux-armv6l.tar.gz"
-else
-    GO_PACKAGE="go1.12.7.linux-386.tar.gz"
-fi
+# Install Go (current stable)
+GO_VERSION="1.22.4"
+ARCH=$(uname -m)
+case "$ARCH" in
+    x86_64)  GO_PACKAGE="go${GO_VERSION}.linux-amd64.tar.gz" ;;
+    aarch64) GO_PACKAGE="go${GO_VERSION}.linux-arm64.tar.gz" ;;
+    armv7l|armv6l) GO_PACKAGE="go${GO_VERSION}.linux-armv6l.tar.gz" ;;
+    *) GO_PACKAGE="go${GO_VERSION}.linux-386.tar.gz" ;;
+esac
 
+rm -rf /usr/local/go
 cd /usr/local/
-wget https://storage.googleapis.com/golang/${GO_PACKAGE}
-tar zxf ${GO_PACKAGE} && rm ${GO_PACKAGE}
+wget "https://go.dev/dl/${GO_PACKAGE}"
+tar zxf "${GO_PACKAGE}" && rm "${GO_PACKAGE}"
 
-cd /usr/bin/
-for X in /usr/local/go/bin/*; 
-do 
-    echo $X; 
-    ln -s $X; 
-done
+export PATH="/usr/local/go/bin:$PATH"
+ln -sf /usr/local/go/bin/go /usr/bin/go 2>/dev/null || true
+ln -sf /usr/local/go/bin/gofmt /usr/bin/gofmt 2>/dev/null || true
 ####################################################################
 
 export GO111MODULE=on
+export GOPATH=/root/go
 
 # Get the drupot source
 cd /opt
 git clone https://github.com/d1str0/drupot.git
 cd drupot
-git checkout v0.2.4
 
 go build
 
@@ -64,8 +63,6 @@ port = 80
 
 site_name = "Nothing"
 name_randomizer = true
-
-# TODO: Optional SSL/TLS Cert
 
 [hpfeeds]
 enabled = true
@@ -96,5 +93,3 @@ EOF
 
 supervisorctl update
 supervisorctl restart all
-
-

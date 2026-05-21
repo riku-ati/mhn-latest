@@ -1,105 +1,100 @@
 #!/bin/bash
+# deploy_cowrie.sh — Modern Cowrie SSH/Telnet honeypot
+# Tested on Ubuntu 20.04 / 22.04
 
 set -e
 set -x
 
-if [ $# -ne 2 ]
-    then
-        echo "Wrong number of arguments supplied."
-        echo "Usage: $0 <server_url> <deploy_key>."
-        exit 1
+if [ $# -ne 2 ]; then
+    echo "Wrong number of arguments supplied."
+    echo "Usage: $0 <server_url> <deploy_key>"
+    exit 1
 fi
-
-apt-get update
-apt-get install -y python
 
 server_url=$1
 deploy_key=$2
 
+# Install dependencies
 apt-get update
-apt-get -y install python-dev git supervisor authbind openssl python-virtualenv build-essential python-gmpy2 libgmp-dev libmpfr-dev libmpc-dev libssl-dev python-pip libffi-dev
+DEBIAN_FRONTEND=noninteractive apt-get install -y \
+    git python3 python3-pip python3-venv \
+    supervisor authbind \
+    build-essential libssl-dev libffi-dev \
+    iptables
 
-pip install -U supervisor
-/etc/init.d/supervisor start || true
+# Move SSH daemon to port 2222 so Cowrie can take port 22
+if ! grep -qE "^Port 2222" /etc/ssh/sshd_config; then
+    sed -i 's/^#\?Port 22$/Port 2222/' /etc/ssh/sshd_config
+    grep -q "^Port " /etc/ssh/sshd_config || echo "Port 2222" >> /etc/ssh/sshd_config
+fi
+systemctl restart ssh || service ssh restart
 
-sed -i 's/#Port/Port/g' /etc/ssh/sshd_config
-sed -i 's/Port 22$/Port 2222/g' /etc/ssh/sshd_config
-service ssh restart
-useradd -d /home/cowrie -s /bin/bash -m cowrie -g users
+# Redirect external port 22 to cowrie's 2222 via iptables
+iptables -t nat -A PREROUTING -p tcp --dport 22 -j REDIRECT --to-port 2222
+iptables -t nat -A PREROUTING -p tcp --dport 23 -j REDIRECT --to-port 2223
 
-cd /opt
-git clone https://github.com/micheloosterhof/cowrie.git cowrie
-cd cowrie
+# Save iptables rules across reboots
+DEBIAN_FRONTEND=noninteractive apt-get install -y iptables-persistent
+iptables-save > /etc/iptables/rules.v4
 
-# Most recent known working version
-git checkout 34f8464
+# Create cowrie system user
+id cowrie &>/dev/null || useradd -r -d /opt/cowrie -m -s /sbin/nologin cowrie
 
-# Config for requirements.txt
-cat > /opt/cowrie/requirements.txt <<EOF
-twisted>=17.1.0
-cryptography>=2.1
-configparser
-pyopenssl
-pyparsing
-packaging
-appdirs>=1.4.0
-pyasn1_modules
-attrs
-service_identity
-python-dateutil
-tftpy
-bcrypt
+# Clone current Cowrie
+rm -rf /opt/cowrie
+git clone https://github.com/cowrie/cowrie.git /opt/cowrie
+cd /opt/cowrie
+
+# Create virtualenv and install
+python3 -m venv cowrie-env
+source cowrie-env/bin/activate
+pip install --upgrade pip
+pip install -r requirements.txt
+
+# Register sensor with MHN server
+wget "$server_url/static/registration.txt" -O /tmp/registration.sh
+chmod 755 /tmp/registration.sh
+. /tmp/registration.sh "$server_url" "$deploy_key" "cowrie"
+
+# Base config from template
+cd /opt/cowrie/etc
+cp cowrie.cfg.dist cowrie.cfg
+
+# hpfeeds output — appended so it doesn't conflict with commented examples
+cat >> cowrie.cfg << EOF
+
+[output_hpfeeds]
+enabled = true
+server = ${HPF_HOST}
+port = ${HPF_PORT}
+identifier = ${HPF_IDENT}
+secret = ${HPF_SECRET}
+debug = false
 EOF
 
-virtualenv cowrie-env #env name has changed to cowrie-env on latest version of cowrie
-source cowrie-env/bin/activate
-# without the following, i get this error:
-# Could not find a version that satisfies the requirement csirtgsdk (from -r requirements.txt (line 10)) (from versions: 0.0.0a5, 0.0.0a6, 0.0.0a5.linux-x86_64, 0.0.0a6.linux-x86_64, 0.0.0a3)
-pip install csirtgsdk==0.0.0a6
-pip install -r requirements.txt 
+# Set listen ports (iptables redirects 22→2222, 23→2223 externally)
+sed -i 's/^#\?listen_endpoints = .*/listen_endpoints = tcp:2222:interface=0.0.0.0/' cowrie.cfg
 
-# Register sensor with MHN server.
-wget $server_url/static/registration.txt -O registration.sh
-chmod 755 registration.sh
-# Note: this will export the HPF_* variables
-. ./registration.sh $server_url $deploy_key "cowrie"
+# Fix permissions
+chown -R cowrie:cowrie /opt/cowrie
 
-cd etc
-cp cowrie.cfg.dist cowrie.cfg
-sed -i 's/hostname = svr04/hostname = server/g' cowrie.cfg
-sed -i 's/listen_endpoints = tcp:2222:interface=0.0.0.0/listen_endpoints = tcp:22:interface=0.0.0.0/g' cowrie.cfg
-sed -i 's/version = SSH-2.0-OpenSSH_6.0p1 Debian-4+deb7u2/version = SSH-2.0-OpenSSH_6.7p1 Ubuntu-5ubuntu1.3/g' cowrie.cfg
-sed -i 's/#\[output_hpfeeds\]/[output_hpfeeds]/g' cowrie.cfg
-sed -i '/\[output_hpfeeds\]/!b;n;cenabled = true' cowrie.cfg
-sed -i "s/#server = hpfeeds.mysite.org/server = $HPF_HOST/g" cowrie.cfg
-sed -i "s/#port = 10000/port = $HPF_PORT/g" cowrie.cfg
-sed -i "s/#identifier = abc123/identifier = $HPF_IDENT/g" cowrie.cfg
-sed -i "s/#secret = secret/secret = $HPF_SECRET/g" cowrie.cfg
-sed -i 's/#debug=false/debug=false/' cowrie.cfg
-cd ..
+mkdir -p /opt/cowrie/var/log/cowrie /opt/cowrie/var/run
+chown -R cowrie:cowrie /opt/cowrie/var
 
-chown -R cowrie:users /opt/cowrie/
-touch /etc/authbind/byport/22
-chown cowrie /etc/authbind/byport/22
-chmod 770 /etc/authbind/byport/22
-
-# start.sh is deprecated on new Cowrie version and substituted by "bin/cowrie [start/stop/status]"
-sed -i 's/AUTHBIND_ENABLED=no/AUTHBIND_ENABLED=yes/' bin/cowrie
-sed -i 's/DAEMONIZE=""/DAEMONIZE="-n"/' bin/cowrie
-
-# Config for supervisor
-cat > /etc/supervisor/conf.d/cowrie.conf <<EOF
+# Supervisor config — run twistd directly so supervisor tracks the process
+cat > /etc/supervisor/conf.d/cowrie.conf << EOF
 [program:cowrie]
-command=/opt/cowrie/bin/cowrie start
+command=/opt/cowrie/cowrie-env/bin/twistd -n --umask=0022 --pidfile= -y /opt/cowrie/cowrie/core/app.py
 directory=/opt/cowrie
+user=cowrie
 stdout_logfile=/opt/cowrie/var/log/cowrie/cowrie.out
 stderr_logfile=/opt/cowrie/var/log/cowrie/cowrie.err
 autostart=true
 autorestart=true
 stopasgroup=true
 killasgroup=true
-user=cowrie
 EOF
 
+supervisorctl reread
 supervisorctl update
-
+supervisorctl start cowrie

@@ -14,7 +14,7 @@ server_url=$1
 deploy_key=$2
 
 apt-get update
-apt-get -y install git python-pip supervisor
+apt-get -y install git python3 python3-pip supervisor
 
 # Get the Amun source
 cd /opt
