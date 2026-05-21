@@ -178,3 +178,13 @@ chmod 755 /etc/cron.daily/update_snort_rules
 
 supervisorctl reread
 supervisorctl update
+supervisorctl start snort
+sleep 3
+supervisorctl start snort-hpfeeds
+
+echo ""
+echo "=== Snort3 deploy complete ==="
+echo "Manage with supervisorctl, not service/systemctl:"
+echo "  supervisorctl status"
+echo "  supervisorctl restart snort"
+echo "  supervisorctl tail -f snort"

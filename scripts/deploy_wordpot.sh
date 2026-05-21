@@ -45,7 +45,7 @@ EOF
 # Config for supervisor.
 cat > /etc/supervisor/conf.d/wordpot.conf <<EOF
 [program:wordpot]
-command=/opt/wordpot/env/bin/python /opt/wordpot/wordpot.py 
+command=/opt/wordpot/env/bin/python3 /opt/wordpot/wordpot.py
 directory=/opt/wordpot
 stdout_logfile=/opt/wordpot/wordpot.out
 stderr_logfile=/opt/wordpot/wordpot.err
@@ -56,3 +56,4 @@ stopsignal=QUIT
 EOF
 
 supervisorctl update
+supervisorctl start wordpot

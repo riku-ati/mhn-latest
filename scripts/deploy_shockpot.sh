@@ -70,3 +70,4 @@ stopsignal=QUIT
 EOF
 
 supervisorctl update
+supervisorctl start shockpot

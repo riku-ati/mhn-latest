@@ -92,4 +92,4 @@ stopsignal=QUIT
 EOF
 
 supervisorctl update
-supervisorctl restart all
+supervisorctl start drupot

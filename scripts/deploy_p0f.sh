@@ -70,3 +70,4 @@ environment=HPFEEDS_HOST="$HPF_HOST",HPFEEDS_PORT="$HPF_PORT",HPFEEDS_CHANNEL="p
 EOF
 
 supervisorctl update
+supervisorctl start p0f
