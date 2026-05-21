@@ -214,9 +214,12 @@ chmod 755 /etc/cron.daily/update_snort_rules
 
 supervisorctl reread
 supervisorctl update
-supervisorctl start snort
+# start is a no-op if supervisorctl update already started the process (autostart=true)
+supervisorctl start snort || true
 sleep 3
-supervisorctl start snort-hpfeeds
+supervisorctl start snort-hpfeeds || true
+
+supervisorctl status
 
 echo ""
 echo "=== Snort3 deploy complete ==="
