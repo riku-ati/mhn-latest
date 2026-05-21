@@ -163,24 +163,26 @@ def create_clean_db():
         from app.tasks.rules import fetch_sources
         # Creating initial deploy scripts.
         # Reading initial deploy script should be: ../../scripts/
+        # Scripts dir is configured via SCRIPTS_DIR (defaults to /scripts in Docker)
+        scripts_dir = mhn.config.get('SCRIPTS_DIR', '/scripts')
         deployscripts = [
-            ['Ubuntu - Conpot', '../scripts/deploy_conpot.sh'],
-            ['Ubuntu/Raspberry Pi - Drupot', '../scripts/deploy_drupot.sh'],
-            ['Ubuntu/Raspberry Pi - Magenpot', '../scripts/deploy_magenpot.sh'],
-            ['Ubuntu - Wordpot', '../scripts/deploy_wordpot.sh'],
-            ['Ubuntu - Shockpot', '../scripts/deploy_shockpot.sh'],
-            ['Ubuntu - p0f', '../scripts/deploy_p0f.sh'],
-            ['Ubuntu - Suricata', '../scripts/deploy_suricata.sh'],
-            ['Ubuntu - Glastopf', '../scripts/deploy_glastopf.sh'],
-            ['Ubuntu - ElasticHoney', '../scripts/deploy_elastichoney.sh'],
-            ['Ubuntu - Amun', '../scripts/deploy_amun.sh'],
-            ['Ubuntu - Snort', '../scripts/deploy_snort.sh'],
-            ['Ubuntu - Cowrie', '../scripts/deploy_cowrie.sh'],
-            ['Ubuntu/Raspberry Pi - Dionaea', '../scripts/deploy_dionaea.sh'],
-            ['Ubuntu - Shockpot Sinkhole', '../scripts/deploy_shockpot_sinkhole.sh'],
+            ['Ubuntu - Conpot', 'deploy_conpot.sh'],
+            ['Ubuntu/Raspberry Pi - Drupot', 'deploy_drupot.sh'],
+            ['Ubuntu/Raspberry Pi - Magenpot', 'deploy_magenpot.sh'],
+            ['Ubuntu - Wordpot', 'deploy_wordpot.sh'],
+            ['Ubuntu - Shockpot', 'deploy_shockpot.sh'],
+            ['Ubuntu - p0f', 'deploy_p0f.sh'],
+            ['Ubuntu - Suricata', 'deploy_suricata.sh'],
+            ['Ubuntu - Glastopf', 'deploy_glastopf.sh'],
+            ['Ubuntu - ElasticHoney', 'deploy_elastichoney.sh'],
+            ['Ubuntu - Amun', 'deploy_amun.sh'],
+            ['Ubuntu - Snort', 'deploy_snort.sh'],
+            ['Ubuntu - Cowrie', 'deploy_cowrie.sh'],
+            ['Ubuntu/Raspberry Pi - Dionaea', 'deploy_dionaea.sh'],
+            ['Ubuntu - Shockpot Sinkhole', 'deploy_shockpot_sinkhole.sh'],
         ]
         for honeypot, deploypath in reversed(deployscripts):
-            deploy_abs = path.abspath(deploypath)
+            deploy_abs = path.join(scripts_dir, deploypath)
             if path.exists(deploy_abs):
                 with open(deploy_abs, 'r') as deployfile:
                     initdeploy = DeployScript()

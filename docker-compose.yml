@@ -13,6 +13,7 @@ services:
       - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
     volumes:
       - ./server/logs:/var/log/mhn
+      - mhn_db:/app/db
     depends_on:
       - mongodb
       - redis
@@ -47,3 +48,4 @@ services:
 
 volumes:
   mongo_data:
+  mhn_db:

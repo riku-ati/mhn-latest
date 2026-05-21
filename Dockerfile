@@ -8,6 +8,8 @@ COPY server/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY server/ .
+# Deploy scripts — needed by initdatabase.py (../scripts/ from /app resolves to /scripts/)
+COPY scripts/ /scripts/
 
 RUN mkdir -p /var/log/mhn
 

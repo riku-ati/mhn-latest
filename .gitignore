@@ -2,8 +2,8 @@
 .env
 *.env
 
-# Generated config (created from config.py.template)
-server/config.py
+# config.py is safe to track — it reads from env vars, no secrets baked in
+# server/config.py
 
 # SQLite database
 *.db
